@@ -15,7 +15,6 @@ def main():
             data.append(inner_list)
         
         table = DoubleTable(data)
-        table.inner_row_border = True
         table.justify_columns[0] = 'center'
         print(table.table)
     except ValueError:
