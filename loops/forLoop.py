@@ -1,6 +1,6 @@
 import sys  
-#pip install terminaltables3
 from terminaltables3 import DoubleTable
+#pip install terminaltables3
 
 def main():
     data = []
