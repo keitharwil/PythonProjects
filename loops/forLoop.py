@@ -1,4 +1,6 @@
 import sys  
+#pip install terminaltables3
+from terminaltables3 import AsciiTable
 
 def main():
     try:
