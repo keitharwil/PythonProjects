@@ -7,6 +7,7 @@ def main():
     try:
         num = int(input("Enter number of Multiplication Table: "))
         multiplied = int(input("Multiplication Table up to what number: "))
+        
         data.append([f"Multiplication table for {num}"])
 
         for row in range(multiplied + 1):
@@ -14,6 +15,9 @@ def main():
             inner_list.append(multiply(num, row))
             data.append(inner_list)
         
+        #removes multiply by 0
+        del data[1]
+
         table = DoubleTable(data)
         table.justify_columns[0] = 'center'
         print(table.table)
