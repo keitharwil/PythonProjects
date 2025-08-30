@@ -10,7 +10,7 @@ def main():
             row_list.append(i)
             data.append(row_list)
         i += 1
-
+#test
     table = SingleTable(data)
     print(table.table)
         
