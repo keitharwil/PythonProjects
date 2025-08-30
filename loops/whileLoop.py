@@ -1,4 +1,3 @@
-import sys
 from terminaltables3 import SingleTable
 
 def main():
@@ -11,7 +10,7 @@ def main():
             row_list.append(i)
             data.append(row_list)
         i += 1
-        
+
     table = SingleTable(data)
     print(table.table)
         
