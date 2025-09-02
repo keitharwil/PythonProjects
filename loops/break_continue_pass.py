@@ -1,7 +1,7 @@
 from collections import Counter
 
 def main():
-    print(calculate_input("Input calculation: "))
+    calculate_input("Input calculation: ")
 
 def calculate_input(prompt):
     operation = []
@@ -10,7 +10,8 @@ def calculate_input(prompt):
             operation = str(input(prompt)).split()
             if len(operation) != 3:
                 raise ValueError
-            return calculate(operation[0], operation[1], operation[2])
+            print(calculate(operation[0], operation[1], operation[2]))
+            break
         except ValueError:
             print("Invalid operation")
             pass

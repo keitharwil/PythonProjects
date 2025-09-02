@@ -21,7 +21,7 @@ def guessing_game():
                 guess_try += 1
                 guesses_left -= 1
                 guess_hint(guess, num_to_guess)
-                if guesses_left >= 10:
+                if guesses_left != 1:
                     print(f"You have {guesses_left} guesses left ")
                 else:
                     print(f"You have {guesses_left} guess left")
