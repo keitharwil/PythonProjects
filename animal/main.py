@@ -1,6 +1,5 @@
 from datetime import datetime
 
-# Import from our custom modules (from...import demonstration)
 from animals import Animal, Dog, Cat, Bird
 from exceptions import (
     AnimalException,
