@@ -33,3 +33,17 @@ class StackManager:
     def get_stack(self):
         """Get the stack as list"""
         return self.linked_list_stack
+    
+    def search(self, value):
+        """
+        Search for a value in the stack
+        Returns the position from top (0-indexed) if found, else -1
+        """
+        for i in range(len(self.linked_list_stack) - 1, -1, -1):  # Search from top to bottom
+            if self.linked_list_stack[i] == value:
+                return len(self.linked_list_stack) - 1 - i  # Position from top (0-indexed)
+        return -1  # Value not found
+    
+    def size(self):
+        """Return the size of the stack"""
+        return len(self.linked_list_stack)
