@@ -1,11 +1,15 @@
 """Stack implementation"""
 
+MAX_STACK_SIZE = 10
+
 class StackManager:
     def __init__(self):
         self.linked_list_stack = []
     
     def push(self, value):
         """Push value onto stack"""
+        if len(self.linked_list_stack) >= MAX_STACK_SIZE:
+            raise ValueError(f"Stack is full! Maximum {MAX_STACK_SIZE} elements allowed.")
         self.linked_list_stack.append(value)
         return f"Pushed node with value: {value}"
     

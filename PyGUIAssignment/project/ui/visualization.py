@@ -6,6 +6,7 @@ class VisualizationCanvas:
     def __init__(self, parent, main_window):
         self.main_window = main_window
         self.colors = COLORS
+        self.reverse_mode = False
         
         # Visualization area
         viz_frame = tk.Frame(parent, bg=self.colors['mantle'], relief=tk.FLAT)
@@ -27,6 +28,10 @@ class VisualizationCanvas:
                        command=command, width=width, cursor="hand2",
                        activebackground=color, activeforeground=self.colors['base'])
         return btn
+    
+    def set_reverse_mode(self, is_reverse):
+        """Set reverse visualization mode"""
+        self.reverse_mode = is_reverse
     
     def draw(self):
         """Main draw method"""
@@ -58,6 +63,19 @@ class VisualizationCanvas:
             
             # Draw stack at bottom
             self.draw_stack_bottom(canvas_width, canvas_height)
+    
+    def draw_curved_arrow(self, x1, y1, x2, y2, color, direction="forward"):
+        """Draw a curved arrow between two points"""
+        # Calculate control point for curve
+        mid_x = (x1 + x2) / 2
+        if direction == "forward":
+            control_y = min(y1, y2) - 20
+        else:
+            control_y = max(y1, y2) + 20
+        
+        # Create smooth curve
+        self.canvas.create_line(x1, y1, mid_x, control_y, x2, y2,
+                               arrow=tk.LAST, fill=color, width=3, smooth=True)
     
     def draw_singly_list(self, canvas_width, canvas_height):
         """Draw singly linked list"""
@@ -91,15 +109,13 @@ class VisualizationCanvas:
                                        text=str(value), fill=self.colors['crust'], 
                                        font=("Segoe UI", 12, "bold"))
                 
-                # Draw arrow to next node
+                # Draw curved arrow to next node
                 if i < len(singly_list) - 1:
                     arrow_start_x = x + node_width + 5
-                    arrow_end_x = arrow_start_x + (spacing - node_width - 15)
+                    arrow_end_x = x + spacing - 5
                     arrow_y = y_pos + node_height//2
-                    self.canvas.create_line(arrow_start_x, arrow_y,
-                                          arrow_end_x, arrow_y,
-                                          arrow=tk.LAST, fill=self.colors['sapphire'], 
-                                          width=3, smooth=True)
+                    self.draw_curved_arrow(arrow_start_x, arrow_y, arrow_end_x, arrow_y, 
+                                          self.colors['sapphire'], "forward")
                 else:
                     # NULL indicator
                     self.canvas.create_text(x + node_width + 30, y_pos + node_height//2,
@@ -113,11 +129,16 @@ class VisualizationCanvas:
     def draw_doubly_list(self, canvas_width, canvas_height):
         """Draw doubly linked list"""
         y_pos = canvas_height // 4
-        self.canvas.create_text(60, 35, text="Doubly Linked List:", 
+        title = "Doubly Linked List (Reversed)" if self.reverse_mode else "Doubly Linked List:"
+        self.canvas.create_text(60, 35, text=title, 
                                fill=self.colors['mauve'], font=("Segoe UI", 12, "bold"), 
                                anchor="w")
         
         nodes = self.main_window.list_manager.get_doubly_list()
+        
+        # Reverse the visualization if in reverse mode
+        if self.reverse_mode:
+            nodes = list(reversed(nodes))
         
         if not nodes:
             self.canvas.create_text(60, y_pos + 30, text="Empty", 
@@ -147,24 +168,19 @@ class VisualizationCanvas:
                                    text=str(value), fill=self.colors['crust'], 
                                    font=("Segoe UI", 12, "bold"))
             
-            # Draw arrows to next node
+            # Draw curved arrows to next node
             if i < len(nodes) - 1:
                 arrow_start_x = x + node_width + 5
-                arrow_end_x = arrow_start_x + (spacing - node_width - 15)
-                arrow_y_forward = y_pos + node_height//3
-                arrow_y_back = y_pos + (node_height * 2)//3
+                arrow_end_x = x + spacing - 5
+                arrow_y_forward = y_pos + node_height//2
                 
-                # Forward arrow
-                self.canvas.create_line(arrow_start_x, arrow_y_forward,
-                                      arrow_end_x, arrow_y_forward,
-                                      arrow=tk.LAST, fill=self.colors['blue'], 
-                                      width=2, smooth=True)
+                # Forward arrow (top curve)
+                self.draw_curved_arrow(arrow_start_x, arrow_y_forward, arrow_end_x, arrow_y_forward,
+                                      self.colors['blue'], "forward")
                 
-                # Backward arrow
-                self.canvas.create_line(arrow_end_x, arrow_y_back,
-                                      arrow_start_x, arrow_y_back,
-                                      arrow=tk.LAST, fill=self.colors['pink'], 
-                                      width=2, smooth=True)
+                # Backward arrow (bottom curve)
+                self.draw_curved_arrow(arrow_end_x, arrow_y_forward, arrow_start_x, arrow_y_forward,
+                                      self.colors['pink'], "backward")
             else:
                 # NULL indicators
                 self.canvas.create_text(x + node_width + 35, y_pos + node_height//3,
@@ -178,7 +194,7 @@ class VisualizationCanvas:
                                   font=("Segoe UI", 9, "italic"))
     
     def draw_circular_singly_list(self, canvas_width, canvas_height):
-        """Draw circular singly linked list"""
+        """Draw circular singly linked list with circular arrow"""
         y_pos = canvas_height // 4
         self.canvas.create_text(60, 35, text="Circular Singly Linked List:", 
                                fill=self.colors['mauve'], font=("Segoe UI", 12, "bold"), 
@@ -214,32 +230,48 @@ class VisualizationCanvas:
                                    text=str(value), fill=self.colors['crust'], 
                                    font=("Segoe UI", 12, "bold"))
             
-            # Draw arrow to next node
+            # Draw curved arrow to next node
             if i < len(circular_list) - 1:
                 arrow_start_x = x + node_width + 5
-                arrow_end_x = arrow_start_x + (spacing - node_width - 15)
+                arrow_end_x = x + spacing - 5
                 arrow_y = y_pos + node_height//2
-                self.canvas.create_line(arrow_start_x, arrow_y,
-                                      arrow_end_x, arrow_y,
-                                      arrow=tk.LAST, fill=self.colors['peach'], 
-                                      width=3, smooth=True)
+                self.draw_curved_arrow(arrow_start_x, arrow_y, arrow_end_x, arrow_y,
+                                      self.colors['peach'], "forward")
         
-        # Draw circular arrow from last to first
-        if len(circular_list) > 1:
+        # Draw circular arrow from last node back to first node
+        if len(circular_list) > 0:
             last_x = start_x + ((len(circular_list) - 1) * spacing) + node_width
             first_x = start_x
+            last_node_center_y = y_pos + node_height // 2
+            first_node_center_y = y_pos + node_height // 8
             
-            # Draw curved arrow back
-            self.canvas.create_arc(first_x, y_pos - 40, last_x, y_pos + 20,
-                                  start=45, extent=90, style=tk.ARC,
-                                  outline=self.colors['peach'], width=3)
-            # Arrow head
-            self.canvas.create_line(first_x + 5, y_pos, first_x - 5, y_pos - 10,
-                                  arrow=tk.LAST, fill=self.colors['peach'], width=3)
+            # Starting point: right side of last node
+            arrow_start_x = last_x
+            arrow_start_y = last_node_center_y
             
-            self.canvas.create_text((first_x + last_x)//2, y_pos - 50,
+            # Ending point: left side of first node
+            arrow_end_x = first_x
+            arrow_end_y = first_node_center_y
+            
+            # Create curved path going up and around
+            # Calculate control points for smooth curve
+            mid_x = (arrow_start_x + arrow_end_x) / 2
+            control_y = y_pos - 60  # Height of the arc above nodes
+            
+            # Draw the curved arrow using smooth bezier curve with arrow
+            self.canvas.create_line(
+                arrow_start_x, arrow_start_y,
+                arrow_start_x + 30, control_y,
+                mid_x, control_y - 20,
+                arrow_end_x - 30, control_y,
+                arrow_end_x, arrow_end_y,
+                smooth=True, fill=self.colors['peach'], width=3, arrow=tk.LAST
+            )
+            
+            # Label at the top
+            self.canvas.create_text(mid_x, control_y - 35,
                                   text="🔄 Circular", fill=self.colors['yellow'],
-                                  font=("Segoe UI", 10, "bold"))
+                                  font=("Segoe UI", 11, "bold"))
     
     def draw_circular_doubly_list(self, canvas_width, canvas_height):
         """Draw circular doubly linked list"""
@@ -278,45 +310,61 @@ class VisualizationCanvas:
                                    text=str(value), fill=self.colors['crust'], 
                                    font=("Segoe UI", 12, "bold"))
             
-            # Draw arrows to next node
+            # Draw curved arrows to next node
             if i < len(nodes) - 1:
                 arrow_start_x = x + node_width + 5
-                arrow_end_x = arrow_start_x + (spacing - node_width - 15)
-                arrow_y_forward = y_pos + node_height//3
-                arrow_y_back = y_pos + (node_height * 2)//3
+                arrow_end_x = x + spacing - 5
+                arrow_y = y_pos + node_height//2
                 
-                # Forward arrow
-                self.canvas.create_line(arrow_start_x, arrow_y_forward,
-                                      arrow_end_x, arrow_y_forward,
-                                      arrow=tk.LAST, fill=self.colors['blue'], 
-                                      width=2, smooth=True)
+                # Forward arrow (top curve)
+                self.draw_curved_arrow(arrow_start_x, arrow_y, arrow_end_x, arrow_y,
+                                      self.colors['blue'], "forward")
                 
-                # Backward arrow
-                self.canvas.create_line(arrow_end_x, arrow_y_back,
-                                      arrow_start_x, arrow_y_back,
-                                      arrow=tk.LAST, fill=self.colors['pink'], 
-                                      width=2, smooth=True)
+                # Backward arrow (bottom curve)
+                self.draw_curved_arrow(arrow_end_x, arrow_y, arrow_start_x, arrow_y,
+                                      self.colors['pink'], "backward")
         
-        # Draw circular connections
+        # Draw circular connections with proper arrows
         if len(nodes) > 1:
             last_x = start_x + ((len(nodes) - 1) * spacing) + node_width
             first_x = start_x
             
-            # Forward circular arrow (top)
-            self.canvas.create_arc(first_x, y_pos - 50, last_x, y_pos + 10,
-                                  start=45, extent=90, style=tk.ARC,
-                                  outline=self.colors['blue'], width=2)
-            self.canvas.create_line(first_x + 5, y_pos + 5, first_x - 3, y_pos - 5,
-                                  arrow=tk.LAST, fill=self.colors['blue'], width=2)
+            # Forward circular arrow (top) - from last node to first node
+            arrow_start_x = last_x
+            arrow_start_y = y_pos + node_height // 3
+            arrow_end_x = first_x
+            arrow_end_y = y_pos + node_height // 9
             
-            # Backward circular arrow (bottom)
-            self.canvas.create_arc(first_x, y_pos + 40, last_x, y_pos + 100,
-                                  start=225, extent=90, style=tk.ARC,
-                                  outline=self.colors['pink'], width=2)
-            self.canvas.create_line(last_x - 5, y_pos + 45, last_x + 3, y_pos + 55,
-                                  arrow=tk.LAST, fill=self.colors['pink'], width=2)
+            mid_x = (arrow_start_x + arrow_end_x) / 2
+            control_y = y_pos - 40
             
-            self.canvas.create_text((first_x + last_x)//2, y_pos - 60,
+            self.canvas.create_line(
+                arrow_start_x, arrow_start_y,
+                arrow_start_x + 30, control_y,
+                mid_x, control_y - 10,
+                arrow_end_x - 30, control_y,
+                arrow_end_x, arrow_end_y,
+                smooth=True, fill=self.colors['blue'], width=4, arrow=tk.LAST
+            )
+            
+            # Backward circular arrow (bottom) - from first node to last node
+            arrow_start_x2 = first_x
+            arrow_start_y2 = y_pos + (node_height * 1) // 2
+            arrow_end_x2 = last_x
+            arrow_end_y2 = y_pos + (node_height * 1) // 1
+            
+            control_y2 = y_pos + node_height + 40
+            
+            self.canvas.create_line(
+                arrow_start_x2, arrow_start_y2,
+                arrow_start_x2 - 30, control_y2,
+                mid_x, control_y2 + 10,
+                arrow_end_x2 + 30, control_y2,
+                arrow_end_x2, arrow_end_y2,
+                smooth=True, fill=self.colors['pink'], width=3, arrow=tk.LAST
+            )
+            
+            self.canvas.create_text(mid_x, control_y - 25,
                                   text="🔄 Circular Doubly", fill=self.colors['teal'],
                                   font=("Segoe UI", 10, "bold"))
     
@@ -354,15 +402,13 @@ class VisualizationCanvas:
                                        text=str(value), fill=self.colors['crust'], 
                                        font=("Segoe UI", 12, "bold"))
                 
-                # Draw arrow to next node
+                # Draw curved arrow to next node
                 if i < len(stack) - 1:
                     arrow_start_x = x + node_width + 5
-                    arrow_end_x = arrow_start_x + (spacing - node_width - 15)
+                    arrow_end_x = x + spacing - 1
                     arrow_y = y_pos + node_height//2
-                    self.canvas.create_line(arrow_start_x, arrow_y,
-                                          arrow_end_x, arrow_y,
-                                          arrow=tk.LAST, fill=self.colors['flamingo'], 
-                                          width=3, smooth=True)
+                    self.draw_curved_arrow(arrow_start_x, arrow_y, arrow_end_x, arrow_y,
+                                          self.colors['flamingo'], "forward")
             
             # Draw "TOP" indicator for stack
             top_x = start_x + ((len(stack) - 1) * spacing) + node_width//2

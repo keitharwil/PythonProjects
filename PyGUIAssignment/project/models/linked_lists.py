@@ -1,6 +1,8 @@
 """Linked list data structures and operations"""
 from .node import Node
 
+MAX_NODES = 10
+
 class LinkedListManager:
     def __init__(self):
         self.singly_list = []
@@ -11,6 +13,9 @@ class LinkedListManager:
     # Singly Linked List Methods
     def singly_insert(self, value, position=None):
         """Insert into singly linked list"""
+        if len(self.singly_list) >= MAX_NODES:
+            raise ValueError(f"List is full! Maximum {MAX_NODES} nodes allowed.")
+        
         if position is not None:
             if position < 0 or position > len(self.singly_list):
                 raise ValueError(f"Position must be between 0 and {len(self.singly_list)}")
@@ -48,9 +53,25 @@ class LinkedListManager:
         """Get singly linked list"""
         return self.singly_list
     
+    def singly_peek(self):
+        """Peek at the first element"""
+        if not self.singly_list:
+            return None
+        return self.singly_list[0]
+    
     # Doubly Linked List Methods
     def doubly_insert(self, value, position=None):
         """Insert into doubly linked list"""
+        # Count nodes
+        count = 0
+        temp = self.doubly_head
+        while temp:
+            count += 1
+            temp = temp.next
+        
+        if count >= MAX_NODES:
+            raise ValueError(f"List is full! Maximum {MAX_NODES} nodes allowed.")
+        
         new_node = Node(value)
         
         if not self.doubly_head:
@@ -155,9 +176,11 @@ class LinkedListManager:
             current = current.next
         
         result = []
+        i = 0
         while current:
-            result.append(current.data)
+            result.append((i, current.data))
             current = current.prev
+            i += 1
         return result
     
     def doubly_clear(self):
@@ -175,9 +198,18 @@ class LinkedListManager:
             current = current.next
         return nodes
     
+    def doubly_peek(self):
+        """Peek at the first element"""
+        if not self.doubly_head:
+            return None
+        return self.doubly_head.data
+    
     # Circular Singly Linked List Methods
     def circular_singly_insert(self, value, position=None):
         """Insert into circular singly linked list"""
+        if len(self.circular_singly_list) >= MAX_NODES:
+            raise ValueError(f"List is full! Maximum {MAX_NODES} nodes allowed.")
+        
         if position is not None:
             if position < 0 or position > len(self.circular_singly_list):
                 raise ValueError(f"Position must be between 0 and {len(self.circular_singly_list)}")
@@ -221,9 +253,28 @@ class LinkedListManager:
         """Get circular singly linked list"""
         return self.circular_singly_list
     
+    def circular_singly_peek(self):
+        """Peek at the first element"""
+        if not self.circular_singly_list:
+            return None
+        return self.circular_singly_list[0]
+    
     # Circular Doubly Linked List Methods
     def circular_doubly_insert(self, value, position=None):
         """Insert into circular doubly linked list"""
+        # Count nodes
+        count = 0
+        if self.circular_doubly_head:
+            temp = self.circular_doubly_head
+            count = 1
+            temp = temp.next
+            while temp != self.circular_doubly_head:
+                count += 1
+                temp = temp.next
+        
+        if count >= MAX_NODES:
+            raise ValueError(f"List is full! Maximum {MAX_NODES} nodes allowed.")
+        
         new_node = Node(value)
         
         if not self.circular_doubly_head:
@@ -359,3 +410,9 @@ class LinkedListManager:
             nodes.append(current.data)
             current = current.next
         return nodes
+    
+    def circular_doubly_peek(self):
+        """Peek at the first element"""
+        if not self.circular_doubly_head:
+            return None
+        return self.circular_doubly_head.data

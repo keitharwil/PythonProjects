@@ -235,6 +235,7 @@ class LinkedListPanel:
     def singly_clear(self):
         self.main_window.list_manager.singly_clear()
         self.main_window.log("✅ Singly linked list cleared!")
+        self.main_window.visualization.set_reverse_mode(False)
         self.main_window.refresh_visualization()
     
     # Doubly Linked List Operations
@@ -288,6 +289,8 @@ class LinkedListPanel:
         self.main_window.log("→ Doubly Linked List (Forward):")
         for i, value in result:
             self.main_window.log(f"  • Node {i}: {value}")
+        self.main_window.visualization.set_reverse_mode(False)
+        self.main_window.refresh_visualization()
     
     def doubly_traverse_reverse(self):
         result = self.main_window.list_manager.doubly_traverse_reverse()
@@ -295,12 +298,15 @@ class LinkedListPanel:
             self.main_window.log("⚠ List is empty!")
             return
         self.main_window.log("← Doubly Linked List (Reverse):")
-        for value in result:
-            self.main_window.log(f"  • Node: {value}")
+        for i, value in result:
+            self.main_window.log(f"  • Node {i}: {value}")
+        self.main_window.visualization.set_reverse_mode(True)
+        self.main_window.refresh_visualization()
     
     def doubly_clear(self):
         self.main_window.list_manager.doubly_clear()
         self.main_window.log("✅ Doubly linked list cleared!")
+        self.main_window.visualization.set_reverse_mode(False)
         self.main_window.refresh_visualization()
     
     # Circular Singly Linked List Operations
