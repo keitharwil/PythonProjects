@@ -265,7 +265,7 @@ class VisualizationCanvas:
                 mid_x, control_y - 20,
                 arrow_end_x - 30, control_y,
                 arrow_end_x, arrow_end_y,
-                smooth=True, fill=self.colors['peach'], width=3, arrow=tk.LAST
+                smooth=True, fill=self.colors['peach'], width=4, arrow=tk.LAST
             )
             
             # Label at the top
