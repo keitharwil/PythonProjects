@@ -273,19 +273,26 @@ class VisualizationCanvas:
                                   text="🔄 Circular", fill=self.colors['yellow'],
                                   font=("Segoe UI", 11, "bold"))
     
+    # Replace the draw_circular_doubly_list method in visualization.py with this:
+
     def draw_circular_doubly_list(self, canvas_width, canvas_height):
         """Draw circular doubly linked list"""
         y_pos = canvas_height // 4
-        self.canvas.create_text(60, 35, text="Circular Doubly Linked List:", 
-                               fill=self.colors['mauve'], font=("Segoe UI", 12, "bold"), 
-                               anchor="w")
+        title = "Circular Doubly Linked List (Reversed)" if self.reverse_mode else "Circular Doubly Linked List:"
+        self.canvas.create_text(60, 35, text=title, 
+                            fill=self.colors['mauve'], font=("Segoe UI", 12, "bold"), 
+                            anchor="w")
         
         nodes = self.main_window.list_manager.get_circular_doubly_list()
         
+        # Reverse the visualization if in reverse mode
+        if self.reverse_mode:
+            nodes = list(reversed(nodes))
+        
         if not nodes:
             self.canvas.create_text(60, y_pos + 30, text="Empty", 
-                                   fill=self.colors['surface2'], 
-                                   font=("Segoe UI", 12, "italic"), anchor="w")
+                                fill=self.colors['surface2'], 
+                                font=("Segoe UI", 12, "italic"), anchor="w")
             return
         
         node_width = 60
@@ -307,8 +314,8 @@ class VisualizationCanvas:
                                         fill=self.colors['teal'], outline=self.colors['lavender'], 
                                         width=3)
             self.canvas.create_text(x + node_width//2, y_pos + node_height//2,
-                                   text=str(value), fill=self.colors['crust'], 
-                                   font=("Segoe UI", 12, "bold"))
+                                text=str(value), fill=self.colors['crust'], 
+                                font=("Segoe UI", 12, "bold"))
             
             # Draw curved arrows to next node
             if i < len(nodes) - 1:
@@ -318,11 +325,11 @@ class VisualizationCanvas:
                 
                 # Forward arrow (top curve)
                 self.draw_curved_arrow(arrow_start_x, arrow_y, arrow_end_x, arrow_y,
-                                      self.colors['blue'], "forward")
+                                    self.colors['blue'], "forward")
                 
                 # Backward arrow (bottom curve)
                 self.draw_curved_arrow(arrow_end_x, arrow_y, arrow_start_x, arrow_y,
-                                      self.colors['pink'], "backward")
+                                    self.colors['pink'], "backward")
         
         # Draw circular connections with proper arrows
         if len(nodes) > 1:
@@ -365,8 +372,8 @@ class VisualizationCanvas:
             )
             
             self.canvas.create_text(mid_x, control_y - 25,
-                                  text="🔄 Circular Doubly", fill=self.colors['teal'],
-                                  font=("Segoe UI", 10, "bold"))
+                                text="🔄 Circular Doubly", fill=self.colors['teal'],
+                                font=("Segoe UI", 10, "bold"))
     
     def draw_stack_bottom(self, canvas_width, canvas_height):
         """Draw stack at the bottom of canvas"""

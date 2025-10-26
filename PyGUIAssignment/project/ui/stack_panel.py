@@ -1,4 +1,4 @@
-"""Stack control panel"""
+"""Stack control panel with Peek functionality"""
 import tkinter as tk
 from tkinter import messagebox
 from config import COLORS
@@ -34,7 +34,7 @@ class StackPanel:
                                    relief=tk.FLAT, insertbackground=self.colors['text'])
         self.push_entry.pack(padx=2, pady=2)
         
-        # Stack operations - Row 1: Push, Pop, Size (all same width as Clear)
+        # Stack operations - Row 1: Push, Pop
         stack_frame_row1 = tk.Frame(parent, bg=self.colors['mantle'])
         stack_frame_row1.pack(pady=5)
         
@@ -48,9 +48,21 @@ class StackPanel:
                                     self.pop_stack, width=12)
         pop_btn.pack(side=tk.LEFT, padx=3)
         
-        self.create_button(parent, "Size", self.colors['yellow'], 
-                          self.get_stack_size, width=26).pack(pady=3)
+        # Stack operations - Row 2: Peek, Size
+        stack_frame_row2 = tk.Frame(parent, bg=self.colors['mantle'])
+        stack_frame_row2.pack(pady=3)
+        
+        # Peek button
+        peek_btn = self.create_button(stack_frame_row2, "Peek", self.colors['lavender'], 
+                                     self.peek_stack, width=12)
+        peek_btn.pack(side=tk.LEFT, padx=3)
+        
+        # Size button
+        size_btn = self.create_button(stack_frame_row2, "Size", self.colors['yellow'], 
+                                     self.get_stack_size, width=12)
+        size_btn.pack(side=tk.LEFT, padx=3)
 
+        # Clear button
         clear_btn = self.create_button(parent, "Clear stack(LL)", self.colors['red'], 
                                       self.clear_stack, width=26)
         clear_btn.pack(pady=3)
@@ -100,6 +112,27 @@ class StackPanel:
         except ValueError as e:
             self.main_window.log(f"⚠ {str(e)}")
             messagebox.showinfo("Info", str(e))
+    
+    def peek_stack(self):
+        """Peek at the top of the stack without removing it"""
+        try:
+            value = self.main_window.stack_manager.peek()
+            if value is None:
+                msg = "Stack is empty!"
+                title = "Peek Result"
+                color = self.colors['red']
+                self.main_window.log(f"⚠ {msg}")
+            else:
+                msg = f"Top of stack: {value}"
+                title = "Peek Result"
+                color = self.colors['lavender']
+                self.main_window.log(f"👁️ {msg}")
+            
+            # Create popup window
+            self.show_popup(title, msg, color)
+            
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
     
     def clear_stack(self):
         self.main_window.stack_manager.clear()
@@ -182,5 +215,7 @@ class StackPanel:
         # Log the result as well
         if "Size" in title:
             self.main_window.log(f"📊 {message}")
+        elif "Peek" in title:
+            pass  # Already logged in peek_stack method
         else:
             self.main_window.log(f"🔍 {message}")
