@@ -1,22 +1,18 @@
 import pygame
-import sys
 
 pygame.init()
-screen = pygame.display.set_mode((800,400)) #Creates window called 'screen' then set_mode' the size of the 'screen'
-pygame.display.set_caption("WINDOW")
-clock = pygame.time.Clock() # Clock object to control FPS for the game
+screen = pygame.display.set_mode((1280,720)) 
+pygame.display.set_caption("NIGGA")
+clock = pygame.time.Clock() 
+running = True
 
-
-test_surface = pygame.surface.fill((200,100))
-
-while True:
+while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
+            running = False
     
-    screen.blit(test_surface,(200,100))
-
-    pygame.display.update()
-    #Tells while True loop to not go above 60 fps
+    screen.fill("BLACK")
+    
+    pygame.display.flip()
     clock.tick(60)
+pygame.quit()
