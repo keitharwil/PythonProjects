@@ -7,7 +7,7 @@ pygame.display.set_caption("WINDOW")
 clock = pygame.time.Clock() # Clock object to control FPS for the game
 
 
-test_surface = pygame.image.load()
+test_surface = pygame.surface.fill((200,100))
 
 while True:
     for event in pygame.event.get():
