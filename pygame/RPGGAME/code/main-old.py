@@ -25,12 +25,12 @@ STATE_MENU = "menu"
 
 class SpriteSheetAnimations:
     def __init__(self, spritesheet_path):
-        # Initialize spritesheet with 80x64 sprite size
+        # Initialize spritesheet with 64x64 sprite size
         self.sheet = Spritesheet(
             filepath=Path(join("assets", "WarriorMan-Sheet.png")),
             sprite_size=(80, 64),
             spacing=(0, 0),
-            scale=(256, 256)  # Scale to 4x size
+            scale=(128, 128)  # Scale to 2x size
         )
         self.animations = self.parse_spritesheet()
     
@@ -45,7 +45,7 @@ class SpriteSheetAnimations:
         animations['walk_up'] = self.sheet.get_sprites([(3, i) for i in range(8)])
         
         # Attack animations
-        animations['attack_down'] = self.sheet.get_sprites([(11, i) for i in range(8)])
+        animations['attack_down'] = self.sheet.get_sprites([(4, i) for i in range(11)])
         animations['attack_left'] = self.sheet.get_sprites([(5, i) for i in range(6)])
         animations['attack_right'] = self.sheet.get_sprites([(6, i) for i in range(5)])
         animations['attack_up'] = self.sheet.get_sprites([(7, i) for i in range(5)])
@@ -74,7 +74,7 @@ class AnimatedSprite:
         self.y = y
         self.current_animation = 'idle_down'
         self.frame_index = 0
-        self.animation_speed = 0.05
+        self.animation_speed = 0.15
         self.animation_timer = 0
         self.loop = True
         self.animation_finished = False
@@ -162,25 +162,12 @@ class Game:
         self.screen_height = self.screen.get_height()
         pygame.display.set_caption("Visual Novel JRPG")
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 48)
-        self.small_font = pygame.font.Font(None, 32)
+        self.font = pygame.font.Font(None, 32)
+        self.small_font = pygame.font.Font(None, 24)
         self.state = STATE_VISUAL_NOVEL
         
         # Load spritesheet (replace with your file path)
         self.player_spritesheet = SpriteSheetAnimations('character_spritesheet.png')
-        
-        # Load backgrounds (optional - set to None to use solid colors)
-        try:
-            self.vn_background = pygame.image.load('vn_background.png').convert()
-            self.vn_background = pygame.transform.scale(self.vn_background, (self.screen_width, self.screen_height))
-        except:
-            self.vn_background = None
-        
-        try:
-            self.battle_background = pygame.image.load('battle_background.png').convert()
-            self.battle_background = pygame.transform.scale(self.battle_background, (self.screen_width, self.screen_height))
-        except:
-            self.battle_background = None
         
         # Initialize scenes
         self.init_scenes()
@@ -194,11 +181,6 @@ class Game:
         self.battle_log = []
         self.battle_phase = "player_turn"
         self.battle_animation_playing = False
-        
-        # Screen effects
-        self.screen_shake_duration = 0
-        self.screen_shake_intensity = 0
-        self.red_flash_alpha = 0
         
     def init_scenes(self):
         self.scenes = {
@@ -242,8 +224,8 @@ class Game:
     
     def start_battle(self):
         self.state = STATE_BATTLE
-        player_sprite = AnimatedSprite(self.player_spritesheet, self.screen_width // 4, self.screen_height // 2)
-        enemy_sprite = AnimatedSprite(self.player_spritesheet, 3 * self.screen_width // 4, self.screen_height // 2)
+        enemy_sprite = AnimatedSprite(self.player_spritesheet, 500, 150)
+        enemy_sprite.set_animation('idle_down')
         self.enemy = Character("Goblin", 60, 60, 15, 3, sprite=enemy_sprite)
         self.player.hp = self.player.max_hp
         self.player.sprite.set_animation('idle_down')
@@ -251,50 +233,9 @@ class Game:
         self.battle_log = ["Battle started!"]
         self.battle_phase = "player_turn"
         self.battle_animation_playing = False
-        self.screen_shake_duration = 0
-        self.screen_shake_intensity = 0
-        self.red_flash_alpha = 0
-    
-    def add_screen_shake(self, duration, intensity):
-        """Add screen shake effect."""
-        self.screen_shake_duration = duration
-        self.screen_shake_intensity = intensity
-    
-    def add_red_flash(self, alpha):
-        """Add red flash effect."""
-        self.red_flash_alpha = alpha
-    
-    def update_screen_effects(self, dt):
-        """Update screen shake and flash effects."""
-        # Update screen shake
-        if self.screen_shake_duration > 0:
-            self.screen_shake_duration -= dt
-            if self.screen_shake_duration < 0:
-                self.screen_shake_duration = 0
-        
-        # Update red flash
-        if self.red_flash_alpha > 0:
-            self.red_flash_alpha -= dt * 400  # Fade out speed
-            if self.red_flash_alpha < 0:
-                self.red_flash_alpha = 0
-    
-    def get_screen_shake_offset(self):
-        """Get current screen shake offset."""
-        if self.screen_shake_duration > 0:
-            import random
-            offset_x = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity)
-            offset_y = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity)
-            return offset_x, offset_y
-        return 0, 0
     
     def draw_text_box(self, text, x, y, width, height):
-        bg_surface = pygame.Surface((width, height))
-        bg_surface.set_alpha(50)  # Transparency level (0-255)
-        bg_surface.fill(BLACK)     # Color of the background
-
-        self.screen.blit(bg_surface, (x, y))
-
-
+        pygame.draw.rect(self.screen, BLACK, (x, y, width, height))
         pygame.draw.rect(self.screen, WHITE, (x, y, width, height), 3)
         
         words = text.split(' ')
@@ -314,80 +255,52 @@ class Game:
         
         for i, line in enumerate(lines[:4]):
             text_surf = self.small_font.render(line, True, WHITE)
-            self.screen.blit(text_surf, (x + 10, y + 10 + i * 35))
+            self.screen.blit(text_surf, (x + 10, y + 10 + i * 30))
     
     def draw_visual_novel(self):
-        # Draw background
-        if self.vn_background:
-            self.screen.blit(self.vn_background, (0, 0))
-        else:
-            self.screen.fill((40, 30, 60))  # Fallback color
+        self.screen.fill((40, 30, 60))
+        
+        # Draw character sprite in visual novel
+        if self.player.sprite:
+            self.player.sprite.x = 350
+            self.player.sprite.y = 100
+            self.player.sprite.set_animation('idle_down')
+            self.player.sprite.draw(self.screen)
         
         scene = self.scenes[self.current_scene_key]
         scene.update()
         
-        # Create dialogue box rect and position at midbottom
-        dialogue_rect = pygame.Rect(0, 0, 700, 150)
-        dialogue_rect.midbottom = (self.screen_width // 2, self.screen_height - 10)
-        
-        # Create name box rect and position above dialogue box
-        name_rect = pygame.Rect(0, 0, 200, 40)
-        name_rect.bottomleft = (dialogue_rect.left, dialogue_rect.top - 10)
-        
         # Draw character name box
-        pygame.draw.rect(self.screen, BLUE, name_rect)
+        pygame.draw.rect(self.screen, BLUE, (50, 350, 200, 40))
         name_text = self.font.render(scene.character_name, True, WHITE)
-        name_text_rect = name_text.get_rect(center=name_rect.center)
-        self.screen.blit(name_text, name_text_rect)
+        self.screen.blit(name_text, (60, 360))
         
         # Draw dialogue box
-        self.draw_text_box(scene.get_displayed_text(), dialogue_rect.x, dialogue_rect.y, dialogue_rect.width, dialogue_rect.height)
+        self.draw_text_box(scene.get_displayed_text(), WINDOW_WIDTH, 400, 700, 150)
         
         # Draw choices if available and text is fully shown
         if scene.choices and scene.full_text_shown:
-            choice_width = 400
-            choice_height = 50
-            choice_spacing = 10
-            start_y = self.screen_height // 3
-            
             for i, (choice_text, _) in enumerate(scene.choices):
-                choice_rect = pygame.Rect(0, 0, choice_width, choice_height)
-                choice_rect.midtop = (self.screen_width // 2, start_y + i * (choice_height + choice_spacing))
-                
+                y_pos = 200 + i * 60
                 color = YELLOW if i == self.battle_menu_index else WHITE
-                pygame.draw.rect(self.screen, GRAY, choice_rect)
-                pygame.draw.rect(self.screen, color, choice_rect, 3)
-                
+                pygame.draw.rect(self.screen, GRAY, (250, y_pos, 300, 50))
+                pygame.draw.rect(self.screen, color, (250, y_pos, 300, 50), 3)
                 choice_surf = self.small_font.render(choice_text, True, color)
-                choice_text_rect = choice_surf.get_rect(center=choice_rect.center)
-                self.screen.blit(choice_surf, choice_text_rect)
+                self.screen.blit(choice_surf, (270, y_pos + 15))
         
         # Draw continue prompt
         if scene.full_text_shown and not scene.choices:
             prompt = self.small_font.render("Press SPACE to continue", True, YELLOW)
-            prompt_rect = prompt.get_rect(bottomright=(self.screen_width - 20, self.screen_height - 20))
-            self.screen.blit(prompt, prompt_rect)
+            self.screen.blit(prompt, (550, 560))
     
     def draw_battle(self):
-        # Get screen shake offset
-        shake_x, shake_y = self.get_screen_shake_offset()
-        
-        # Create a temporary surface for shaking
-        temp_surface = pygame.Surface((self.screen_width, self.screen_height))
-        
-        # Draw background
-        if self.battle_background:
-            temp_surface.blit(self.battle_background, (0, 0))
-        else:
-            temp_surface.fill((60, 40, 40))  # Fallback color
+        self.screen.fill((60, 40, 40))
         
         # Update and draw sprites
         dt = self.clock.get_time() / 1000.0
-        self.update_screen_effects(dt)
-        
         if self.player.sprite:
             self.player.sprite.update(dt)
-            self.player.sprite.draw(temp_surface)
+            self.player.sprite.draw(self.screen)
             
             # Check if attack animation finished
             if self.battle_animation_playing and self.player.sprite.animation_finished:
@@ -396,78 +309,47 @@ class Game:
         
         if self.enemy and self.enemy.sprite:
             self.enemy.sprite.update(dt)
-            self.enemy.sprite.draw(temp_surface)
-        
-        # Create stat boxes with anchor positioning
-        player_stats_rect = pygame.Rect(0, 0, 200, 120)
-        player_stats_rect.bottomleft = (100, self.screen_height - 180)
-        
-        enemy_stats_rect = pygame.Rect(0, 0, 200, 120)
-        enemy_stats_rect.bottomright = (self.screen_width - 100, self.screen_height - 180)
+            self.enemy.sprite.draw(self.screen)
         
         # Draw player stats
-        self.draw_character_stats_on_surface(temp_surface, self.player, player_stats_rect.x, player_stats_rect.y, True)
+        self.draw_character_stats(self.player, 50, 350, True)
         
         # Draw enemy stats
-        self.draw_character_stats_on_surface(temp_surface, self.enemy, enemy_stats_rect.x, enemy_stats_rect.y, False)
+        self.draw_character_stats(self.enemy, 500, 350, False)
         
-        # Draw battle menu (bottom left)
+        # Draw battle menu
         if self.battle_phase == "player_turn" and not self.battle_animation_playing:
             menu_options = ["Attack", "Magic", "Heal"]
-            menu_width = 200
-            menu_height = 40
-            menu_spacing = 5
-            
             for i, option in enumerate(menu_options):
-                menu_rect = pygame.Rect(0, 0, menu_width, menu_height)
-                menu_rect.bottomleft = (100, self.screen_height - 20 - (len(menu_options) - 1 - i) * (menu_height + menu_spacing))
-                
+                y_pos = 450 + i * 50
                 color = YELLOW if i == self.battle_menu_index else WHITE
-                pygame.draw.rect(temp_surface, GRAY, menu_rect)
-                pygame.draw.rect(temp_surface, color, menu_rect, 3)
-                
+                pygame.draw.rect(self.screen, GRAY, (50, y_pos, 200, 40))
+                pygame.draw.rect(self.screen, color, (50, y_pos, 200, 40), 3)
                 text = self.small_font.render(option, True, color)
-                text_rect = text.get_rect(center=menu_rect.center)
-                temp_surface.blit(text, text_rect)
+                self.screen.blit(text, (70, y_pos + 10))
         
-        # Draw battle log (center bottom)
-        log_width = 500
-        log_height = 150
-        log_rect = pygame.Rect(0, 0, log_width, log_height)
-        log_rect.midbottom = (self.screen_width // 2, self.screen_height - 20)
-        
-        pygame.draw.rect(temp_surface, BLACK, log_rect)
-        pygame.draw.rect(temp_surface, WHITE, log_rect, 2)
-        
+        # Draw battle log
+        pygame.draw.rect(self.screen, BLACK, (280, 420, 480, 150))
+        pygame.draw.rect(self.screen, WHITE, (280, 420, 480, 150), 2)
         for i, log in enumerate(self.battle_log[-5:]):
             log_text = self.small_font.render(log, True, WHITE)
-            temp_surface.blit(log_text, (log_rect.x + 10, log_rect.y + 10 + i * 28))
-        
-        # Blit temp surface to screen with shake offset
-        self.screen.blit(temp_surface, (shake_x, shake_y))
-        
-        # Draw red flash overlay
-        if self.red_flash_alpha > 0:
-            flash_surface = pygame.Surface((self.screen_width, self.screen_height))
-            flash_surface.set_alpha(int(self.red_flash_alpha))
-            flash_surface.fill(RED)
-            self.screen.blit(flash_surface, (0, 0))
+            self.screen.blit(log_text, (290, 430 + i * 28))
     
-    def draw_character_stats_on_surface(self, surface, char, x, y, is_player):
+    def draw_character_stats(self, char, x, y, is_player):
         # Character box
         color = GREEN if is_player else RED
-        pygame.draw.rect(surface, color, (x, y, 200, 120), 3)
+        pygame.draw.rect(self.screen, color, (x, y, 200, 120), 3)
         
         # Name
         name_text = self.font.render(char.name, True, WHITE)
-        surface.blit(name_text, (x + 10, y + 10))
+        self.screen.blit(name_text, (x + 10, y + 10))
         
         # HP bar
         hp_ratio = char.hp / char.max_hp
-        pygame.draw.rect(surface, GRAY, (x + 10, y + 50, 180, 20))
-        pygame.draw.rect(surface, GREEN, (x + 10, y + 50, int(180 * hp_ratio), 20))
+        pygame.draw.rect(self.screen, GRAY, (x + 10, y + 50, 180, 20))
+        pygame.draw.rect(self.screen, GREEN, (x + 10, y + 50, int(180 * hp_ratio), 20))
         hp_text = self.small_font.render(f"HP: {char.hp}/{char.max_hp}", True, WHITE)
-        surface.blit(hp_text, (x + 10, y + 80))
+        self.screen.blit(hp_text, (x + 10, y + 80))
     
     def handle_visual_novel_input(self, event):
         scene = self.scenes[self.current_scene_key]
@@ -491,7 +373,7 @@ class Game:
                     self.battle_menu_index = (self.battle_menu_index - 1) % len(scene.choices)
                 elif event.key == pygame.K_DOWN:
                     self.battle_menu_index = (self.battle_menu_index + 1) % len(scene.choices)
-                elif event.key == pygame.K_z:
+                elif event.key == pygame.K_RETURN:
                     _, next_scene = scene.choices[self.battle_menu_index]
                     self.current_scene_key = next_scene
                     self.scenes[self.current_scene_key].current_char = 0
@@ -508,27 +390,17 @@ class Game:
                 self.execute_battle_action()
     
     def execute_battle_action(self):
-        # CHANGE 1: Immediately switch phase to 'wait' or 'enemy_turn' to lock input
-        self.battle_phase = "wait" 
-        
         self.battle_animation_playing = True
         
         if self.battle_menu_index == 0:  # Attack
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('attack_down', loop=False)
             damage = self.enemy.take_damage(self.player.atk)
             self.battle_log.append(f"{self.player.name} attacks for {damage} damage!")
-            self.add_screen_shake(0.3, 8)
-            self.add_red_flash(100)
         elif self.battle_menu_index == 1:  # Magic
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('cast_down', loop=False)
             damage = self.enemy.take_damage(self.player.atk + 10)
             self.battle_log.append(f"{self.player.name} casts magic for {damage} damage!")
-            self.add_screen_shake(0.4, 12)
-            self.add_red_flash(150)
         elif self.battle_menu_index == 2:  # Heal
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('cast_down', loop=False)
             heal_amount = 20
             self.player.heal(heal_amount)
@@ -548,10 +420,6 @@ class Game:
         
         damage = self.player.take_damage(self.enemy.atk)
         self.battle_log.append(f"{self.enemy.name} attacks for {damage} damage!")
-        
-        # Add screen shake and red flash for enemy attack
-        self.add_screen_shake(0.3, 8)
-        self.add_red_flash(100)
         
         if not self.player.is_alive:
             self.battle_log.append("You have been defeated!")

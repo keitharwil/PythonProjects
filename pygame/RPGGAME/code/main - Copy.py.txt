@@ -162,8 +162,8 @@ class Game:
         self.screen_height = self.screen.get_height()
         pygame.display.set_caption("Visual Novel JRPG")
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 48)
-        self.small_font = pygame.font.Font(None, 32)
+        self.font = pygame.font.Font(None, 32)
+        self.small_font = pygame.font.Font(None, 24)
         self.state = STATE_VISUAL_NOVEL
         
         # Load spritesheet (replace with your file path)
@@ -314,7 +314,7 @@ class Game:
         
         for i, line in enumerate(lines[:4]):
             text_surf = self.small_font.render(line, True, WHITE)
-            self.screen.blit(text_surf, (x + 10, y + 10 + i * 35))
+            self.screen.blit(text_surf, (x + 10, y + 10 + i * 30))
     
     def draw_visual_novel(self):
         # Draw background
@@ -508,27 +508,23 @@ class Game:
                 self.execute_battle_action()
     
     def execute_battle_action(self):
-        # CHANGE 1: Immediately switch phase to 'wait' or 'enemy_turn' to lock input
-        self.battle_phase = "wait" 
-        
         self.battle_animation_playing = True
         
         if self.battle_menu_index == 0:  # Attack
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('attack_down', loop=False)
             damage = self.enemy.take_damage(self.player.atk)
             self.battle_log.append(f"{self.player.name} attacks for {damage} damage!")
-            self.add_screen_shake(0.3, 8)
-            self.add_red_flash(100)
+            # Add screen shake and red flash
+            self.add_screen_shake(0.3, 8)  # 0.3 seconds, intensity 8
+            self.add_red_flash(100)  # Alpha value 100
         elif self.battle_menu_index == 1:  # Magic
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('cast_down', loop=False)
             damage = self.enemy.take_damage(self.player.atk + 10)
             self.battle_log.append(f"{self.player.name} casts magic for {damage} damage!")
+            # Stronger effects for magic
             self.add_screen_shake(0.4, 12)
             self.add_red_flash(150)
         elif self.battle_menu_index == 2:  # Heal
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('cast_down', loop=False)
             heal_amount = 20
             self.player.heal(heal_amount)

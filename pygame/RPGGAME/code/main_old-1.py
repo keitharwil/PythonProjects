@@ -25,12 +25,12 @@ STATE_MENU = "menu"
 
 class SpriteSheetAnimations:
     def __init__(self, spritesheet_path):
-        # Initialize spritesheet with 80x64 sprite size
+        # Initialize spritesheet with 64x64 sprite size
         self.sheet = Spritesheet(
             filepath=Path(join("assets", "WarriorMan-Sheet.png")),
             sprite_size=(80, 64),
             spacing=(0, 0),
-            scale=(256, 256)  # Scale to 4x size
+            scale=(256, 256)  # Scale to 2x size
         )
         self.animations = self.parse_spritesheet()
     
@@ -74,7 +74,7 @@ class AnimatedSprite:
         self.y = y
         self.current_animation = 'idle_down'
         self.frame_index = 0
-        self.animation_speed = 0.05
+        self.animation_speed = 0.15
         self.animation_timer = 0
         self.loop = True
         self.animation_finished = False
@@ -162,8 +162,8 @@ class Game:
         self.screen_height = self.screen.get_height()
         pygame.display.set_caption("Visual Novel JRPG")
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 48)
-        self.small_font = pygame.font.Font(None, 32)
+        self.font = pygame.font.Font(None, 32)
+        self.small_font = pygame.font.Font(None, 24)
         self.state = STATE_VISUAL_NOVEL
         
         # Load spritesheet (replace with your file path)
@@ -242,8 +242,8 @@ class Game:
     
     def start_battle(self):
         self.state = STATE_BATTLE
-        player_sprite = AnimatedSprite(self.player_spritesheet, self.screen_width // 4, self.screen_height // 2)
-        enemy_sprite = AnimatedSprite(self.player_spritesheet, 3 * self.screen_width // 4, self.screen_height // 2)
+        enemy_sprite = AnimatedSprite(self.player_spritesheet, 500, 150)
+        enemy_sprite.set_animation('idle_down')
         self.enemy = Character("Goblin", 60, 60, 15, 3, sprite=enemy_sprite)
         self.player.hp = self.player.max_hp
         self.player.sprite.set_animation('idle_down')
@@ -288,13 +288,7 @@ class Game:
         return 0, 0
     
     def draw_text_box(self, text, x, y, width, height):
-        bg_surface = pygame.Surface((width, height))
-        bg_surface.set_alpha(50)  # Transparency level (0-255)
-        bg_surface.fill(BLACK)     # Color of the background
-
-        self.screen.blit(bg_surface, (x, y))
-
-
+        pygame.draw.rect(self.screen, BLACK, (x, y, width, height))
         pygame.draw.rect(self.screen, WHITE, (x, y, width, height), 3)
         
         words = text.split(' ')
@@ -314,7 +308,7 @@ class Game:
         
         for i, line in enumerate(lines[:4]):
             text_surf = self.small_font.render(line, True, WHITE)
-            self.screen.blit(text_surf, (x + 10, y + 10 + i * 35))
+            self.screen.blit(text_surf, (x + 10, y + 10 + i * 30))
     
     def draw_visual_novel(self):
         # Draw background
@@ -322,6 +316,13 @@ class Game:
             self.screen.blit(self.vn_background, (0, 0))
         else:
             self.screen.fill((40, 30, 60))  # Fallback color
+        
+        # Draw character sprite in visual novel
+        # if self.player.sprite:
+        #     self.player.sprite.x = 350
+        #     self.player.sprite.y = 100
+        #     self.player.sprite.set_animation('idle_down')
+        #     self.player.sprite.draw(self.screen)
         
         scene = self.scenes[self.current_scene_key]
         scene.update()
@@ -398,50 +399,29 @@ class Game:
             self.enemy.sprite.update(dt)
             self.enemy.sprite.draw(temp_surface)
         
-        # Create stat boxes with anchor positioning
-        player_stats_rect = pygame.Rect(0, 0, 200, 120)
-        player_stats_rect.bottomleft = (100, self.screen_height - 180)
-        
-        enemy_stats_rect = pygame.Rect(0, 0, 200, 120)
-        enemy_stats_rect.bottomright = (self.screen_width - 100, self.screen_height - 180)
-        
         # Draw player stats
-        self.draw_character_stats_on_surface(temp_surface, self.player, player_stats_rect.x, player_stats_rect.y, True)
+        self.draw_character_stats_on_surface(temp_surface, self.player, 50, 350, True)
         
         # Draw enemy stats
-        self.draw_character_stats_on_surface(temp_surface, self.enemy, enemy_stats_rect.x, enemy_stats_rect.y, False)
+        self.draw_character_stats_on_surface(temp_surface, self.enemy, 500, 350, False)
         
-        # Draw battle menu (bottom left)
+        # Draw battle menu
         if self.battle_phase == "player_turn" and not self.battle_animation_playing:
             menu_options = ["Attack", "Magic", "Heal"]
-            menu_width = 200
-            menu_height = 40
-            menu_spacing = 5
-            
             for i, option in enumerate(menu_options):
-                menu_rect = pygame.Rect(0, 0, menu_width, menu_height)
-                menu_rect.bottomleft = (100, self.screen_height - 20 - (len(menu_options) - 1 - i) * (menu_height + menu_spacing))
-                
+                y_pos = 450 + i * 50
                 color = YELLOW if i == self.battle_menu_index else WHITE
-                pygame.draw.rect(temp_surface, GRAY, menu_rect)
-                pygame.draw.rect(temp_surface, color, menu_rect, 3)
-                
+                pygame.draw.rect(temp_surface, GRAY, (50, y_pos, 200, 40))
+                pygame.draw.rect(temp_surface, color, (50, y_pos, 200, 40), 3)
                 text = self.small_font.render(option, True, color)
-                text_rect = text.get_rect(center=menu_rect.center)
-                temp_surface.blit(text, text_rect)
+                temp_surface.blit(text, (70, y_pos + 10))
         
-        # Draw battle log (center bottom)
-        log_width = 500
-        log_height = 150
-        log_rect = pygame.Rect(0, 0, log_width, log_height)
-        log_rect.midbottom = (self.screen_width // 2, self.screen_height - 20)
-        
-        pygame.draw.rect(temp_surface, BLACK, log_rect)
-        pygame.draw.rect(temp_surface, WHITE, log_rect, 2)
-        
+        # Draw battle log
+        pygame.draw.rect(temp_surface, BLACK, (280, 420, 480, 150))
+        pygame.draw.rect(temp_surface, WHITE, (280, 420, 480, 150), 2)
         for i, log in enumerate(self.battle_log[-5:]):
             log_text = self.small_font.render(log, True, WHITE)
-            temp_surface.blit(log_text, (log_rect.x + 10, log_rect.y + 10 + i * 28))
+            temp_surface.blit(log_text, (290, 430 + i * 28))
         
         # Blit temp surface to screen with shake offset
         self.screen.blit(temp_surface, (shake_x, shake_y))
@@ -456,18 +436,18 @@ class Game:
     def draw_character_stats_on_surface(self, surface, char, x, y, is_player):
         # Character box
         color = GREEN if is_player else RED
-        pygame.draw.rect(surface, color, (x, y, 200, 120), 3)
+        pygame.draw.rect(self.screen, color, (x, y, 200, 120), 3)
         
         # Name
         name_text = self.font.render(char.name, True, WHITE)
-        surface.blit(name_text, (x + 10, y + 10))
+        self.screen.blit(name_text, (x + 10, y + 10))
         
         # HP bar
         hp_ratio = char.hp / char.max_hp
-        pygame.draw.rect(surface, GRAY, (x + 10, y + 50, 180, 20))
-        pygame.draw.rect(surface, GREEN, (x + 10, y + 50, int(180 * hp_ratio), 20))
+        pygame.draw.rect(self.screen, GRAY, (x + 10, y + 50, 180, 20))
+        pygame.draw.rect(self.screen, GREEN, (x + 10, y + 50, int(180 * hp_ratio), 20))
         hp_text = self.small_font.render(f"HP: {char.hp}/{char.max_hp}", True, WHITE)
-        surface.blit(hp_text, (x + 10, y + 80))
+        self.screen.blit(hp_text, (x + 10, y + 80))
     
     def handle_visual_novel_input(self, event):
         scene = self.scenes[self.current_scene_key]
@@ -491,7 +471,7 @@ class Game:
                     self.battle_menu_index = (self.battle_menu_index - 1) % len(scene.choices)
                 elif event.key == pygame.K_DOWN:
                     self.battle_menu_index = (self.battle_menu_index + 1) % len(scene.choices)
-                elif event.key == pygame.K_z:
+                elif event.key == pygame.K_RETURN:
                     _, next_scene = scene.choices[self.battle_menu_index]
                     self.current_scene_key = next_scene
                     self.scenes[self.current_scene_key].current_char = 0
@@ -508,27 +488,23 @@ class Game:
                 self.execute_battle_action()
     
     def execute_battle_action(self):
-        # CHANGE 1: Immediately switch phase to 'wait' or 'enemy_turn' to lock input
-        self.battle_phase = "wait" 
-        
         self.battle_animation_playing = True
         
         if self.battle_menu_index == 0:  # Attack
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('attack_down', loop=False)
             damage = self.enemy.take_damage(self.player.atk)
             self.battle_log.append(f"{self.player.name} attacks for {damage} damage!")
-            self.add_screen_shake(0.3, 8)
-            self.add_red_flash(100)
+            # Add screen shake and red flash
+            self.add_screen_shake(0.3, 8)  # 0.3 seconds, intensity 8
+            self.add_red_flash(100)  # Alpha value 100
         elif self.battle_menu_index == 1:  # Magic
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('cast_down', loop=False)
             damage = self.enemy.take_damage(self.player.atk + 10)
             self.battle_log.append(f"{self.player.name} casts magic for {damage} damage!")
+            # Stronger effects for magic
             self.add_screen_shake(0.4, 12)
             self.add_red_flash(150)
         elif self.battle_menu_index == 2:  # Heal
-            # ... (rest of the logic remains the same)
             self.player.sprite.set_animation('cast_down', loop=False)
             heal_amount = 20
             self.player.heal(heal_amount)
