@@ -57,7 +57,7 @@ class SpriteSheetAnimations:
         animations['cast_up'] = self.sheet.get_sprites([(11, i) for i in range(8)])
         
         # Death animation
-        animations['death'] = self.sheet.get_sprites([(12, i) for i in range(13)])
+        animations['death'] = self.sheet.get_sprites([(26, i) for i in range(7)])
         
         # Idle animations (first frame of walk)
         animations['idle_down'] = [animations['walk_down'][0]]

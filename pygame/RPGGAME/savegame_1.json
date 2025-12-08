@@ -1,0 +1,1 @@
+{"player": {"name": "Hero", "max_hp": 100, "hp": 100, "max_mp": 100, "mp": 100, "atk": 100, "defense": 100, "level": 1, "exp": 0, "exp_to_next": 100, "gold": 0, "potions": 3, "speed": 30}, "dungeon_unlocked": 10}
