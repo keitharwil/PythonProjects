@@ -10,7 +10,7 @@ from os.path import join
 try:
     from spritesheet import Spritesheet
 except ImportError:
-    print("Warning: spritesheet.py not found. Sprites will not load.")
+    print("Warning: spritesheet.py not found. Player sprites will not load.")
     Spritesheet = None
 
 pygame.init()
@@ -81,7 +81,8 @@ class FloatingText:
             surface.blit(outline, (self.x + 2, self.y + 2))
             surface.blit(txt_surf, (self.x, self.y))
 
-# --- ANIMATION CLASSES ---
+# --- SPRITE CLASSES ---
+
 class SpriteSheetAnimations:
     def __init__(self):
         self.animations = {}
@@ -106,6 +107,7 @@ class SpriteSheetAnimations:
         return anim
 
 class AnimatedSprite:
+    """For the Player (Uses Spritesheet)"""
     def __init__(self, animation_manager, x, y):
         self.manager = animation_manager
         self.x = x
@@ -150,6 +152,28 @@ class AnimatedSprite:
             pygame.draw.rect(surface, GREEN, rect)
         return rect
 
+class StaticSprite:
+    """For Enemies (Uses Single Image)"""
+    def __init__(self, image, x, y):
+        self.image = image
+        self.x = x
+        self.y = y
+        # Center the image rect on x, y
+        self.rect = self.image.get_rect(center=(int(x), int(y)))
+        self.animation_finished = True # Static images are always "done" playing
+
+    def set_animation(self, animation_name, loop=True):
+        # Ignore animation calls for static images
+        pass
+
+    def update(self, dt):
+        # Static images don't update frames
+        pass
+
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)
+        return self.rect
+
 # --- RPG CLASSES ---
 class Skill:
     def __init__(self, name, cost, power, type="damage", element="physical"):
@@ -168,15 +192,14 @@ class Character:
         
         self.level = 1; self.exp = 0; self.exp_to_next = 100; self.gold = 0; self.potions = 3
         
-        # ATB Stats
         self.atb = 0
-        self.speed = 30 + (self.level * 0.3) # Base speed
+        self.speed = 20
         
         self.skills = []
         if is_player:
             self.skills.append(Skill("Heavy Slash", 5, 1.5, "damage", "physical"))
-            self.skills.append(Skill("Fireball", 15, 2.0, "damage", "magic"))
             self.skills.append(Skill("Heal", 10, 30, "heal", "magic"))
+            self.skills.append(Skill("Fireball", 15, 2.0, "damage", "magic"))
 
     def take_damage(self, damage):
         actual = max(0, damage - self.defense)
@@ -236,12 +259,17 @@ class Game:
         self.font = pygame.font.Font(None, int(self.HEIGHT * 0.05))
         self.small_font = pygame.font.Font(None, int(self.HEIGHT * 0.03))
         
+        # Load Player Animations
         self.anim_manager = SpriteSheetAnimations()
         
+        # Load Backgrounds
         self.bg_start = self.load_background("bg_start.png")
         self.bg_hub = self.load_background("bg_hub.png")
         self.bg_battle = self.load_background("bg_battle.png")
         self.bg_shop = self.load_background("bg_shop.png")
+
+        # Load Enemy Images (Static)
+        self.enemy_images = self.load_enemy_images()
 
         self.state = STATE_START
         self.player = Character("Hero", 100, 50, 20, 5, is_player=True)
@@ -277,6 +305,46 @@ class Game:
         except:
             pass
         return None
+
+    def load_enemy_images(self):
+        """Loads static enemy images or creates fallbacks"""
+        print("--- LOADING ENEMY ASSETS ---")
+        names = ["Slime", "Goblin", "Skeleton", "Orc", "Demon", "Golem", "Chimera", "Dark Knight", "Dragon", "Demon Lord"]
+        images = {}
+        
+        # Ensure assets folder exists
+        if not os.path.exists("assets"):
+            print("WARNING: 'assets' folder not found. Creating fallbacks.")
+
+        for name in names:
+            filename = f"{name}.png"
+            path = Path(join("assets", filename))
+            loaded = False
+            
+            try:
+                if path.exists():
+                    img = pygame.image.load(path).convert_alpha()
+                    scale = 0.5
+                    w, h = int(img.get_width() * scale), int(img.get_height() * scale)
+                    images[name] = pygame.transform.scale(img, (w, h))
+                    loaded = True
+                    print(f"Loaded: {filename}")
+                else:
+                    print(f"Missing: {filename} (Using Fallback)")
+            except Exception as e:
+                print(f"Error loading {filename}: {e}")
+
+            if not loaded:
+                surf = pygame.Surface((150, 150))
+                random.seed(name) 
+                color = (random.randint(50, 200), random.randint(50, 200), random.randint(50, 200))
+                surf.fill(color)
+                pygame.draw.rect(surf, WHITE, (0,0,150,150), 5)
+                txt = self.small_font.render(name, True, WHITE)
+                surf.blit(txt, (75 - txt.get_width()//2, 75 - txt.get_height()//2))
+                images[name] = surf
+                
+        return images
 
     def reset_game(self):
         self.player = Character("Hero", 100, 50, 20, 5, is_player=True)
@@ -333,16 +401,29 @@ class Game:
         if self.state == STATE_BATTLE and self.enemy and self.enemy.is_alive:
             self.mechanic_timer -= dt
             if self.mechanic_timer <= 0:
-                self.mechanic_timer = self.mechanic_interval
-                zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
+                # Timer Logic
                 c_type = self.enemy.char_type
+                zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
+                
+                next_time = 3.0
+                if c_type == "Demon Lord":
+                    next_time = random.uniform(6.0, 10.0)
+                self.mechanic_timer = next_time
+
+                # Mechanics
                 if c_type in ["Goblin", "Chimera"]: self.enemy_blocked_zones = [random.choice(zones)]
                 elif c_type in ["Orc", "Dark Knight", "Dragon"]:
                     open_spot = random.choice(zones)
                     self.enemy_blocked_zones = [z for z in zones if z != open_spot]
-                elif c_type == "Demon Lord" and not self.demon_barrier_active:
-                    open_spot = random.choice(zones)
-                    self.enemy_blocked_zones = [z for z in zones if z != open_spot]
+                elif c_type == "Demon Lord":
+                    if not self.demon_barrier_active:
+                        self.demon_barrier_active = True
+                        self.enemy_blocked_zones = []
+                        if self.enemy.sprite:
+                            self.spawn_popup("BARRIER RESTORED!", PURPLE, self.enemy.sprite.x, self.enemy.sprite.y)
+                    else:
+                        open_spot = random.choice(zones)
+                        self.enemy_blocked_zones = [z for z in zones if z != open_spot]
 
     def handle_input(self):
         self.mouse_click_pos = None
@@ -429,10 +510,17 @@ class Game:
             self.enemy_blocked_zones = [z for z in zones if z != open_spot]
         elif c_type in ["Demon", "Demon Lord"]: self.demon_barrier_active = True
         self.mechanic_timer = self.mechanic_interval
+        
         self.player.sprite = AnimatedSprite(self.anim_manager, self.WIDTH * 0.25, self.HEIGHT * 0.6)
         self.player.sprite.set_animation("idle_down")
-        self.enemy.sprite = AnimatedSprite(self.anim_manager, self.WIDTH * 0.75, self.HEIGHT * 0.6)
-        self.enemy.sprite.set_animation("idle_down")
+        
+        # Load enemy image safely
+        if c_type in self.enemy_images:
+            enemy_img = self.enemy_images[c_type]
+        else:
+            enemy_img = list(self.enemy_images.values())[0] # Fallback
+            
+        self.enemy.sprite = StaticSprite(enemy_img, self.WIDTH * 0.75, self.HEIGHT * 0.6)
 
     def end_player_turn(self):
         self.player.atb = 0
@@ -443,6 +531,7 @@ class Game:
     def execute_attack(self, zone):
         self.is_battle_active = False 
         if self.player.sprite: self.player.sprite.set_animation("attack_down", loop=False)
+        
         damage_mult = 1.0
         popup_txt = ""; popup_col = WHITE
         c_type = self.enemy.char_type
@@ -474,15 +563,17 @@ class Game:
         if self.player.sprite: self.player.sprite.set_animation("cast_down", loop=False)
         if skill.type == "heal":
             self.player.heal(skill.power)
-            if self.player.sprite: self.spawn_popup(f"+{skill.power} HP", GREEN, self.player.sprite.x, self.player.sprite.y)
+            if self.player.sprite: 
+                self.spawn_popup(f"+{skill.power} HP", GREEN, self.player.sprite.x, self.player.sprite.y)
             self.check_win()
             self.end_player_turn()
             return
+        
         damage = int(self.player.atk * skill.power)
         popup_txt = ""; popup_col = WHITE
         c_type = self.enemy.char_type
         if c_type in ["Skeleton", "Golem"] and skill.element == "magic":
-            damage = int(damage * 1.5); popup_txt = "CRIT! "; popup_col = YELLOW; self.add_screen_shake(0.5, 15)
+            damage = int(damage * 2.0); popup_txt = "CRIT! "; popup_col = YELLOW; self.add_screen_shake(0.5, 15)
         if c_type in ["Demon", "Demon Lord"] and skill.element == "magic":
             if self.demon_barrier_active:
                 self.demon_barrier_active = False; popup_txt = "SHATTERED! "; popup_col = RED; self.add_screen_shake(0.5, 15)
@@ -497,7 +588,8 @@ class Game:
         if self.player.potions > 0:
              self.player.potions -= 1
              self.player.heal(50)
-             if self.player.sprite: self.spawn_popup("+50 HP", GREEN, self.player.sprite.x, self.player.sprite.y)
+             if self.player.sprite: 
+                 self.spawn_popup("+50 HP", GREEN, self.player.sprite.x, self.player.sprite.y)
              self.check_win()
              self.end_player_turn()
         else:
@@ -506,7 +598,8 @@ class Game:
     def check_win(self):
         if not self.enemy.is_alive:
              self.is_battle_active = False 
-             if self.enemy.sprite: self.enemy.sprite.set_animation("idle_down") 
+             self.add_screen_shake(0.8, 25)
+             self.add_red_flash(255)
              pygame.time.set_timer(pygame.USEREVENT + 2, 1500, 1) 
 
     def trigger_victory_screen(self):
@@ -519,9 +612,9 @@ class Game:
         if self.player.sprite: self.player.sprite.set_animation("idle_down")
 
     def enemy_attack_trigger(self):
-        if self.enemy.sprite: self.enemy.sprite.set_animation("attack_down", loop=False)
         dmg = self.player.take_damage(self.enemy.atk)
-        if self.player.sprite: self.spawn_popup(str(dmg), RED, self.player.sprite.x, self.player.sprite.y)
+        if self.player.sprite: 
+            self.spawn_popup(str(dmg), RED, self.player.sprite.x, self.player.sprite.y)
         self.add_red_flash(150)
         self.add_screen_shake(0.3, 10)
         if not self.player.is_alive:
@@ -557,14 +650,14 @@ class Game:
         if not self.enemy or not self.enemy.is_alive: return
         hint = ""; color = WHITE
         c_type = self.enemy.char_type
-        if c_type == "Slime": hint = "The Slime wobbles..."; color = CYAN
+        if c_type == "Slime": hint = "The Slime wobbles... Vulnerable everywhere."; color = CYAN
         elif c_type == "Goblin": blocked = self.enemy_blocked_zones[0]; hint = f"Goblin blocks {blocked.upper()}!"; color = YELLOW
         elif c_type in ["Orc", "Dark Knight", "Dragon"]:
             all_zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
             open_zone = [z for z in all_zones if z not in self.enemy_blocked_zones][0]
             hint = f"Heavy Guard! {open_zone.upper()} exposed!"; color = ORANGE
         elif c_type == "Chimera": blocked = self.enemy_blocked_zones[0]; hint = f"The Chimera guards {blocked.upper()} with its tail!"; color = ORANGE
-        elif c_type in ["Skeleton", "Golem"]: hint = "Armor is too thick... ."; color = GRAY
+        elif c_type in ["Skeleton", "Golem"]: hint = "Armor is too thick... Physical attacks useless."; color = GRAY
         elif c_type in ["Demon", "Demon Lord"]:
             if self.demon_barrier_active: hint = "Dark Shield Active! (Magic Required)"; color = PURPLE
             else: 
@@ -597,10 +690,9 @@ class Game:
         
         if e_rect and self.enemy.is_alive: 
             self.draw_hp_bar(self.screen, e_rect, self.enemy.hp, self.enemy.max_hp, RED)
-            # Draw Name
             name_surf = self.small_font.render(self.enemy.name, True, WHITE)
-            name_rect = name_surf.get_rect(midtop=(e_rect.centerx, e_rect.bottom + 5))
             outline_surf = self.small_font.render(self.enemy.name, True, BLACK)
+            name_rect = name_surf.get_rect(midtop=(e_rect.centerx, e_rect.bottom + 5))
             self.screen.blit(outline_surf, (name_rect.x + 2, name_rect.y + 2))
             self.screen.blit(name_surf, name_rect)
         
@@ -618,10 +710,15 @@ class Game:
                 opts = ["Attack", "Skills", "Potion", "Flee"]
                 for i, o in enumerate(opts):
                     if self.draw_button(o, menu_x, ui_y + 30 + i*50, i, YELLOW, GRAY):
-                        if i == 0: self.battle_menu_state = BATTLE_ATTACK_SELECT; self.menu_index = 1
-                        elif i == 1: self.battle_menu_state = BATTLE_SKILLS; self.menu_index = 0
+                        if i == 0: 
+                            self.battle_menu_state = BATTLE_ATTACK_SELECT
+                            self.menu_index = 1
+                        elif i == 1: 
+                            self.battle_menu_state = BATTLE_SKILLS
+                            self.menu_index = 0
                         elif i == 2: self.execute_potion()
                         elif i == 3: self.state = STATE_HUB
+                        break 
             elif self.battle_menu_state == BATTLE_ATTACK_SELECT:
                 self.screen.blit(self.small_font.render("SELECT ZONE (ESC BACK)", True, WHITE), (menu_x, ui_y + 10))
                 opts = ["High Strike", "Mid Strike", "Low Strike"]
@@ -629,6 +726,7 @@ class Game:
                 for i, o in enumerate(opts):
                     if self.draw_button(o, menu_x, ui_y + 40 + i*50, i, ORANGE, GRAY):
                         self.execute_attack(zones[i])
+                        break
             elif self.battle_menu_state == BATTLE_SKILLS:
                 self.screen.blit(self.small_font.render("SELECT SKILL (ESC BACK)", True, WHITE), (menu_x, ui_y + 10))
                 for i, sk in enumerate(self.player.skills):
@@ -636,6 +734,7 @@ class Game:
                     if self.player.mp < sk.cost: color = DARK_GRAY
                     if self.draw_button(f"{sk.name} ({sk.cost} MP)", menu_x, ui_y + 40 + i*50, i, color, GRAY):
                         self.execute_skill(sk)
+                        break
         if self.red_flash_alpha > 0:
             flash = pygame.Surface((self.WIDTH, self.HEIGHT))
             flash.fill(RED); flash.set_alpha(int(self.red_flash_alpha))
@@ -693,8 +792,6 @@ class Game:
                         self.player.sprite.set_animation("idle_down")
                 if self.enemy.sprite: 
                     self.enemy.sprite.update(dt)
-                    if self.enemy.sprite.animation_finished and self.enemy.sprite.current_animation in ["attack_down", "cast_down"]:
-                        self.enemy.sprite.set_animation("idle_down")
                 if not self.player.is_alive and self.player.sprite and self.player.sprite.animation_finished:
                      pygame.time.delay(1000)
                      self.state = STATE_GAME_OVER
