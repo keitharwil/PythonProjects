@@ -81,6 +81,46 @@ class FloatingText:
             surface.blit(outline, (self.x + 2, self.y + 2))
             surface.blit(txt_surf, (self.x, self.y))
 
+class OneShotEffect:
+    """Handles temporary particle effects from sprite sheets"""
+    def __init__(self, spritesheet, x, y, frame_size=64, animation_speed=0.03):
+        self.frames = []
+        self.x = x
+        self.y = y
+        self.current_frame = 0
+        self.animation_timer = 0
+        self.animation_speed = animation_speed
+        self.finished = False
+        
+        # Cut the spritesheet into frames
+        sheet_width = spritesheet.get_width()
+        sheet_height = spritesheet.get_height()
+        
+        # Assuming frames are in a single horizontal row
+        for i in range(0, sheet_width, frame_size):
+            # Create a surface for the frame
+            frame = pygame.Surface((frame_size, frame_size), pygame.SRCALPHA).convert_alpha()
+            # Blit the specific section of the sheet onto the frame
+            frame.blit(spritesheet, (0, 0), (i, 0, frame_size, sheet_height))
+            # Scale it up (2x looks good for effects)
+            scaled_frame = pygame.transform.scale(frame, (frame_size * 2, frame_size * 2))
+            self.frames.append(scaled_frame)
+
+    def update(self, dt):
+        self.animation_timer += dt
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            self.current_frame += 1
+            if self.current_frame >= len(self.frames):
+                self.finished = True
+
+    def draw(self, surface):
+        if not self.finished and self.current_frame < len(self.frames):
+            img = self.frames[self.current_frame]
+            # Center the effect on x, y
+            rect = img.get_rect(center=(self.x, self.y))
+            surface.blit(img, rect)
+
 # --- SPRITE CLASSES ---
 
 class SpriteSheetAnimations:
@@ -102,12 +142,11 @@ class SpriteSheetAnimations:
         anim = {}
         anim['idle_down'] = self.sheet.get_sprites([(0, i) for i in range(8)])
         anim['attack_down'] = self.sheet.get_sprites([(11, i) for i in range(8)])
-        anim['cast_down'] = self.sheet.get_sprites([(13, i) for i in range(13)])
+        anim['cast_down'] = self.sheet.get_sprites([(13, i) for i in range(10)])
         anim['death'] = self.sheet.get_sprites([(26, i) for i in range(7)])
         return anim
 
 class AnimatedSprite:
-    """For the Player (Uses Spritesheet)"""
     def __init__(self, animation_manager, x, y):
         self.manager = animation_manager
         self.x = x
@@ -153,12 +192,10 @@ class AnimatedSprite:
         return rect
 
 class StaticSprite:
-    """For Enemies (Uses Single Image)"""
     def __init__(self, image, x, y):
         self.image = image
         self.x = x
         self.y = y
-        # FORCE INT: Pygame sometimes crashes if these are floats
         self.rect = self.image.get_rect(center=(int(x), int(y)))
         self.animation_finished = True 
 
@@ -171,6 +208,7 @@ class StaticSprite:
     def draw(self, surface):
         surface.blit(self.image, self.rect)
         return self.rect
+
 # --- RPG CLASSES ---
 class Skill:
     def __init__(self, name, cost, power, type="damage", element="physical"):
@@ -196,7 +234,6 @@ class Character:
         if is_player:
             self.skills.append(Skill("Heal", 10, 30, "heal", "magic"))
             self.skills.append(Skill("Fireball", 15, 2.0, "damage", "magic"))
-
 
     def take_damage(self, damage):
         actual = max(0, damage - self.defense)
@@ -256,17 +293,15 @@ class Game:
         self.font = pygame.font.Font(None, int(self.HEIGHT * 0.05))
         self.small_font = pygame.font.Font(None, int(self.HEIGHT * 0.03))
         
-        # Load Player Animations
         self.anim_manager = SpriteSheetAnimations()
         
-        # Load Backgrounds
+        # Load Assets
         self.bg_start = self.load_background("bg_start.png")
         self.bg_hub = self.load_background("bg_hub.png")
         self.bg_battle = self.load_background("bg_battle.png")
         self.bg_shop = self.load_background("bg_shop.png")
-
-        # Load Enemy Images (Static)
         self.enemy_images = self.load_enemy_images()
+        self.vfx_sheets = self.load_vfx_assets()
 
         self.state = STATE_START
         self.player = Character("Hero", 100, 50, 20, 5, is_player=True)
@@ -289,6 +324,7 @@ class Game:
         self.mechanic_timer = 0
         self.mechanic_interval = 3.0
         self.floating_texts = []
+        self.active_vfx = []
         
         self.mouse_click_pos = None
         self.key_pressed_enter = False
@@ -304,49 +340,51 @@ class Game:
         return None
 
     def load_enemy_images(self):
-        """Loads static enemy images or creates fallbacks"""
-        print("--- LOADING ENEMY ASSETS ---")
         names = ["Slime", "Goblin", "Skeleton", "Orc", "Demon", "Golem", "Chimera", "Dark Knight", "Dragon", "Demon Lord"]
         images = {}
-        
-        # Ensure assets folder exists
-        if not os.path.exists("assets"):                                                                                        
-            print("WARNING: 'assets' folder not found. Creating fallbacks.")
-
         for name in names:
             filename = f"{name}.png"
             path = Path(join("assets", filename))
-            loaded = False
-            
             try:
                 if path.exists():
                     img = pygame.image.load(path).convert_alpha()
                     scale = 0.8
                     w, h = img.get_width() * scale, img.get_height() * scale
                     images[name] = pygame.transform.scale(img, (w, h))
-                    loaded = True
-                    print(f"Loaded: {filename}")
                 else:
-                    print(f"Missing: {filename} (Using Fallback)")
-            except Exception as e:
-                print(f"Error loading {filename}: {e}")
-
-            if not loaded:
-                # Fallback: Create a colored block with text
-                surf = pygame.Surface((150, 150))
-                # Pick a color based on name hash to make them distinct
-                random.seed(name) 
-                color = (random.randint(50, 200), random.randint(50, 200), random.randint(50, 200))
-                surf.fill(color)
-                pygame.draw.rect(surf, WHITE, (0,0,150,150), 5)
-                
-                # Draw name on surf
+                    raise FileNotFoundError
+            except:
+                surf = pygame.Surface((200, 200))
+                surf.fill(RED)
+                pygame.draw.rect(surf, WHITE, (0,0,200,200), 5)
                 txt = self.small_font.render(name, True, WHITE)
-                surf.blit(txt, (75 - txt.get_width()//2, 75 - txt.get_height()//2))
+                surf.blit(txt, (100 - txt.get_width()//2, 100 - txt.get_height()//2))
                 images[name] = surf
-                
         return images
-    
+
+    def load_vfx_assets(self):
+        """Loads VFX Sprite Sheets"""
+        assets = {}
+        files = {"slash": "vfx_slash.png", "fire": "vfx_fire.png"}
+        for name, filename in files.items():
+            path = Path(join("assets", filename))
+            try:
+                if path.exists():
+                    assets[name] = pygame.image.load(path).convert_alpha()
+                else:
+                    # Fallback circle
+                    s = pygame.Surface((320, 64), pygame.SRCALPHA)
+                    pygame.draw.circle(s, YELLOW, (32,32), 20)
+                    assets[name] = s
+            except: pass
+        return assets
+
+    def create_vfx(self, name, target_sprite):
+        if name in self.vfx_sheets and target_sprite:
+            # target_sprite can be StaticSprite or AnimatedSprite. Both have x,y
+            effect = OneShotEffect(self.vfx_sheets[name], target_sprite.x, target_sprite.y)
+            self.active_vfx.append(effect)
+
     def reset_game(self):
         self.player = Character("Hero", 100, 50, 20, 5, is_player=True)
         self.current_dungeon_depth = 1
@@ -401,42 +439,23 @@ class Game:
 
         if self.state == STATE_BATTLE and self.enemy and self.enemy.is_alive:
             self.mechanic_timer -= dt
-            
             if self.mechanic_timer <= 0:
-                c_type = self.enemy.char_type
+                self.mechanic_timer = self.mechanic_interval
                 zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
-
-                # --- 1. SET NEXT TIMER DURATION ---
-                # Default for Goblin/Orc/etc is 3.0 seconds
-                next_time = 3.0
-                
-                # Demon Lord gets a random time between 6 and 10 seconds
-                if c_type == "Demon Lord":
-                    next_time = random.uniform(10.0, 15.0)
-                
-                self.mechanic_timer = next_time
-
-                # --- 2. APPLY MECHANICS ---
-                if c_type in ["Goblin", "Chimera"]: 
-                    self.enemy_blocked_zones = [random.choice(zones)]
-                
+                c_type = self.enemy.char_type
+                if c_type in ["Goblin", "Chimera"]: self.enemy_blocked_zones = [random.choice(zones)]
                 elif c_type in ["Orc", "Dark Knight", "Dragon"]:
                     open_spot = random.choice(zones)
                     self.enemy_blocked_zones = [z for z in zones if z != open_spot]
-                
                 elif c_type == "Demon Lord":
-                    # If barrier is down, restore it
                     if not self.demon_barrier_active:
-                        self.demon_barrier_active = True
-                        # Clear blocked zones because Barrier provides total immunity
-                        self.enemy_blocked_zones = []
-                        if self.enemy.sprite:
-                            self.spawn_popup("BARRIER RESTORED!", PURPLE, self.enemy.sprite.x, self.enemy.sprite.y)
-                    else:
-                        # If barrier is already active, we can shuffle his physical guard behind the barrier
-                        # or just leave it. Let's make him change stance behind the barrier:
-                        open_spot = random.choice(zones)
-                        self.enemy_blocked_zones = [z for z in zones if z != open_spot]
+                        if random.random() < 0.3: 
+                            self.demon_barrier_active = True
+                            if self.enemy.sprite:
+                                self.spawn_popup("BARRIER RESTORED!", PURPLE, self.enemy.sprite.x, self.enemy.sprite.y)
+                        else:
+                            open_spot = random.choice(zones)
+                            self.enemy_blocked_zones = [z for z in zones if z != open_spot]
 
     def handle_input(self):
         self.mouse_click_pos = None
@@ -483,24 +502,9 @@ class Game:
                     if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % limit
                     if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % limit
                     
-                    if event.key == pygame.K_x:
+                    if event.key == pygame.K_ESCAPE:
                         if self.battle_menu_state != BATTLE_MAIN:
                             self.battle_menu_state = BATTLE_MAIN; self.menu_index = 0
-
-    def handle_battle_input(self, event):
-        if self.battle_menu_state == BATTLE_MAIN:
-            if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 4
-            if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 4
-            if event.key == pygame.K_RETURN:
-                if self.menu_index == 0: self.execute_attack()
-                elif self.menu_index == 1: self.battle_menu_state = BATTLE_SKILLS; self.menu_index = 0
-                elif self.menu_index == 2: self.execute_potion()
-                elif self.menu_index == 3: self.state = STATE_HUB
-        elif self.battle_menu_state == BATTLE_SKILLS:
-            if event.key == pygame.K_x: self.battle_menu_state = BATTLE_MAIN; self.menu_index = 0
-            if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % len(self.player.skills)
-            if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % len(self.player.skills)
-            if event.key == pygame.K_RETURN: self.execute_skill(self.player.skills[self.menu_index])
 
     def draw_button(self, text, x, y, index, active_color, inactive_color, font=None):
         if font is None: font = self.font
@@ -522,6 +526,8 @@ class Game:
         self.active_battle_level = level
         self.enemy = generate_enemy(level)
         self.floating_texts = []
+        self.active_vfx = []
+        
         self.is_battle_active = True
         self.is_player_turn_ready = False
         self.player.atb = 0
@@ -539,7 +545,6 @@ class Game:
         elif c_type in ["Demon", "Demon Lord"]: self.demon_barrier_active = True
         self.mechanic_timer = self.mechanic_interval
         
-        # Player is Animated Sprite
         self.player.sprite = AnimatedSprite(self.anim_manager, self.WIDTH * 0.25, self.HEIGHT * 0.6)
         self.player.sprite.set_animation("idle_down")
         
@@ -556,6 +561,10 @@ class Game:
     def execute_attack(self, zone):
         self.is_battle_active = False 
         if self.player.sprite: self.player.sprite.set_animation("attack_down", loop=False)
+        
+        # VFX
+        if self.enemy.sprite: self.create_vfx("slash", self.enemy.sprite)
+
         damage_mult = 1.0
         popup_txt = ""; popup_col = WHITE
         c_type = self.enemy.char_type
@@ -585,12 +594,19 @@ class Game:
         self.is_battle_active = False
         self.player.mp -= skill.cost
         if self.player.sprite: self.player.sprite.set_animation("cast_down", loop=False)
+        
         if skill.type == "heal":
             self.player.heal(skill.power)
-            if self.player.sprite: self.spawn_popup(f"+{skill.power} HP", GREEN, self.player.sprite.x, self.player.sprite.y)
+            if self.player.sprite: 
+                self.spawn_popup(f"+{skill.power} HP", GREEN, self.player.sprite.x, self.player.sprite.y)
+                self.create_vfx("heal", self.player.sprite)
             self.check_win()
             self.end_player_turn()
             return
+        
+        # Offensive Skill
+        if self.enemy.sprite and skill.element == "magic": self.create_vfx("fire", self.enemy.sprite)
+
         damage = int(self.player.atk * skill.power)
         popup_txt = ""; popup_col = WHITE
         c_type = self.enemy.char_type
@@ -610,7 +626,9 @@ class Game:
         if self.player.potions > 0:
              self.player.potions -= 1
              self.player.heal(50)
-             if self.player.sprite: self.spawn_popup("+50 HP", GREEN, self.player.sprite.x, self.player.sprite.y)
+             if self.player.sprite: 
+                 self.spawn_popup("+50 HP", GREEN, self.player.sprite.x, self.player.sprite.y)
+                 self.create_vfx("heal", self.player.sprite)
              self.check_win()
              self.end_player_turn()
         else:
@@ -619,7 +637,7 @@ class Game:
     def check_win(self):
         if not self.enemy.is_alive:
              self.is_battle_active = False 
-             # Enemy is static, no animation change needed
+             # Enemy is static
              self.add_screen_shake(0.8, 25)
              self.add_red_flash(255)
              pygame.time.set_timer(pygame.USEREVENT + 2, 1500, 1) 
@@ -634,9 +652,10 @@ class Game:
         if self.player.sprite: self.player.sprite.set_animation("idle_down")
 
     def enemy_attack_trigger(self):
-        # Enemy is static, no animation call needed, maybe a shake?
         dmg = self.player.take_damage(self.enemy.atk)
-        if self.player.sprite: self.spawn_popup(str(dmg), RED, self.player.sprite.x, self.player.sprite.y)
+        if self.player.sprite: 
+            self.spawn_popup(str(dmg), RED, self.player.sprite.x, self.player.sprite.y)
+            self.create_vfx("slash", self.player.sprite)
         self.add_red_flash(150)
         self.add_screen_shake(0.3, 10)
         if not self.player.is_alive:
@@ -711,12 +730,21 @@ class Game:
             oy = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity) if self.screen_shake_duration > 0 else 0
             self.screen.blit(self.bg_battle, (ox, oy))
         else: self.screen.fill((40, 20, 20))
+        
+        # Calculate dt for VFX
+        dt = self.clock.get_time() / 1000.0
 
         self.draw_battle_hint()
         p_rect = None; e_rect = None
         if self.player.sprite: p_rect = self.player.sprite.draw(self.screen)
         if self.enemy.sprite: e_rect = self.enemy.sprite.draw(self.screen)
         
+        # VFX Layer (On top of entities)
+        for vfx in self.active_vfx[:]:
+            vfx.update(dt)
+            vfx.draw(self.screen)
+            if vfx.finished: self.active_vfx.remove(vfx)
+
         if p_rect and self.player.is_alive: 
             self.draw_hp_bar(self.screen, p_rect, self.player.hp, self.player.max_hp, GREEN)
             self.draw_atb_bar(self.screen, p_rect, self.player.atb, ATB_MAX)
@@ -731,7 +759,6 @@ class Game:
             self.screen.blit(name_surf, name_rect)
         
         for txt in self.floating_texts: txt.draw(self.screen)
-
         ui_y = self.HEIGHT - 250
         pygame.draw.rect(self.screen, BLACK, (0, ui_y, self.WIDTH, 250))
         pygame.draw.rect(self.screen, WHITE, (0, ui_y, self.WIDTH, 250), 3)
@@ -740,13 +767,10 @@ class Game:
         self.screen.blit(self.font.render(f"Potions: {self.player.potions}", True, YELLOW), (50, ui_y + 130))
         
         menu_x = self.WIDTH // 2 - 100
-        
-        # Only draw menu if player turn is ready
         if self.is_player_turn_ready and self.is_battle_active:
             if self.battle_menu_state == BATTLE_MAIN:
                 opts = ["Attack", "Skills", "Potion", "Flee"]
                 for i, o in enumerate(opts):
-                    # We check return value. If True, action taken.
                     if self.draw_button(o, menu_x, ui_y + 30 + i*50, i, YELLOW, GRAY):
                         if i == 0: 
                             self.battle_menu_state = BATTLE_ATTACK_SELECT
@@ -754,31 +778,25 @@ class Game:
                         elif i == 1: 
                             self.battle_menu_state = BATTLE_SKILLS
                             self.menu_index = 0
-                        elif i == 2: 
-                            self.execute_potion()
-                        elif i == 3: 
-                            self.state = STATE_HUB
-                        # CRITICAL FIX: Break loop so we don't process other buttons with the new index
+                        elif i == 2: self.execute_potion()
+                        elif i == 3: self.state = STATE_HUB
                         break 
-
             elif self.battle_menu_state == BATTLE_ATTACK_SELECT:
-                self.screen.blit(self.small_font.render("SELECT ZONE (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
+                self.screen.blit(self.small_font.render("SELECT ZONE (ESC BACK)", True, WHITE), (menu_x, ui_y + 10))
                 opts = ["High Strike", "Mid Strike", "Low Strike"]
                 zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
                 for i, o in enumerate(opts):
                     if self.draw_button(o, menu_x, ui_y + 40 + i*50, i, ORANGE, GRAY):
                         self.execute_attack(zones[i])
-                        break # Break loop
-
+                        break
             elif self.battle_menu_state == BATTLE_SKILLS:
-                self.screen.blit(self.small_font.render("SELECT SKILL (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
+                self.screen.blit(self.small_font.render("SELECT SKILL (ESC BACK)", True, WHITE), (menu_x, ui_y + 10))
                 for i, sk in enumerate(self.player.skills):
                     color = YELLOW
                     if self.player.mp < sk.cost: color = DARK_GRAY
                     if self.draw_button(f"{sk.name} ({sk.cost} MP)", menu_x, ui_y + 40 + i*50, i, color, GRAY):
                         self.execute_skill(sk)
-                        break # Break loop
-
+                        break
         if self.red_flash_alpha > 0:
             flash = pygame.Surface((self.WIDTH, self.HEIGHT))
             flash.fill(RED); flash.set_alpha(int(self.red_flash_alpha))
@@ -836,7 +854,6 @@ class Game:
                         self.player.sprite.set_animation("idle_down")
                 if self.enemy.sprite: 
                     self.enemy.sprite.update(dt)
-                    # Enemy is static, no animation check needed
                 if not self.player.is_alive and self.player.sprite and self.player.sprite.animation_finished:
                      pygame.time.delay(1000)
                      self.state = STATE_GAME_OVER
