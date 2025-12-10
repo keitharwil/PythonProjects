@@ -52,6 +52,7 @@ STATE_SAVE_MENU = "save_menu"
 BATTLE_MAIN = "main_menu"
 BATTLE_ATTACK_SELECT = "attack_select"
 BATTLE_SKILLS = "skills_menu"
+BATTLE_ITEM_SELECT = "item_select"
 
 # --- HELPER CLASSES ---
 
@@ -187,7 +188,9 @@ class Character:
         self.sprite = None
         self.char_type = char_type 
         
-        self.level = 1; self.exp = 0; self.exp_to_next = 100; self.gold = 0; self.potions = 3
+        self.level = 1; self.exp = 0; self.exp_to_next = 100; self.gold = 0
+        self.potions = 3
+        self.mana_potions = 1 
         
         self.atb = 0
         self.speed = 20
@@ -217,8 +220,24 @@ class Character:
             leveled = True
         return leveled
 
-    def to_dict(self): return {"name": self.name, "max_hp": self.max_hp, "hp": self.hp, "max_mp": self.max_mp, "mp": self.mp, "atk": self.atk, "defense": self.defense, "level": self.level, "exp": self.exp, "exp_to_next": self.exp_to_next, "gold": self.gold, "potions": self.potions, "speed": self.speed}
-    def load_from_dict(self, d): self.name = d["name"]; self.max_hp = d["max_hp"]; self.hp = d["hp"]; self.max_mp = d.get("max_mp", 50); self.mp = d.get("mp", 50); self.atk = d["atk"]; self.defense = d["defense"]; self.level = d["level"]; self.exp = d["exp"]; self.exp_to_next = d["exp_to_next"]; self.gold = d["gold"]; self.potions = d["potions"]; self.speed = d.get("speed", 20)
+    def to_dict(self): 
+        return {
+            "name": self.name, "max_hp": self.max_hp, "hp": self.hp, 
+            "max_mp": self.max_mp, "mp": self.mp, "atk": self.atk, 
+            "defense": self.defense, "level": self.level, "exp": self.exp, 
+            "exp_to_next": self.exp_to_next, "gold": self.gold, 
+            "potions": self.potions, "mana_potions": self.mana_potions,
+            "speed": self.speed
+        }
+    
+    def load_from_dict(self, d): 
+        self.name = d["name"]; self.max_hp = d["max_hp"]; self.hp = d["hp"]
+        self.max_mp = d.get("max_mp", 50); self.mp = d.get("mp", 50)
+        self.atk = d["atk"]; self.defense = d["defense"]
+        self.level = d["level"]; self.exp = d["exp"]; self.exp_to_next = d["exp_to_next"]
+        self.gold = d["gold"]; self.potions = d["potions"]
+        self.mana_potions = d.get("mana_potions", 0)
+        self.speed = d.get("speed", 20)
 
 def generate_enemy(level):
     types = [
@@ -259,11 +278,32 @@ class Game:
         # Load Player Animations
         self.anim_manager = SpriteSheetAnimations()
         
-        # Load Backgrounds
+        # Load Main Backgrounds
         self.bg_start = self.load_background("bg_start.png")
         self.bg_hub = self.load_background("bg_hub.png")
-        self.bg_battle = self.load_background("bg_battle.png")
+        self.bg_battle_default = self.load_background("bg_battle.png") # The default fallback
         self.bg_shop = self.load_background("bg_shop.png")
+
+        # --- LOAD BATTLE BACKGROUNDS PER ENEMY ---
+        # 1. Configuration: Map Enemy Name to Filename
+        self.battle_bg_config = {
+            "Slime": "bg_forest.png",
+            "Goblin": "bg_forest.png",
+            "Skeleton": "bg_graveyard.png",
+            "Orc": "bg_forest.png",
+            "Demon": "bg_castle_entrance.png",
+            "Golem": "bg_mountains.png",
+            "Chimera": "bg_mountains.png",
+            "Dark Knight": "bg_demon_castle.png",
+            "Dragon": "bg_dragon_lair.png",
+            "Demon Lord": "bg_demon_lord.png"
+        }
+        
+        # 2. Load them into memory
+        self.battle_backgrounds = {}
+        self.load_all_battle_backgrounds()
+
+        self.current_battle_bg = self.bg_battle_default # Variable for the current active BG
 
         # Load Enemy Images (Static)
         self.enemy_images = self.load_enemy_images()
@@ -303,13 +343,23 @@ class Game:
             pass
         return None
 
+    def load_all_battle_backgrounds(self):
+        """Loads specific backgrounds per enemy based on config"""
+        print("--- LOADING BATTLE BACKGROUNDS ---")
+        for enemy_type, filename in self.battle_bg_config.items():
+            bg = self.load_background(filename)
+            if bg:
+                self.battle_backgrounds[enemy_type] = bg
+                print(f"Loaded BG for {enemy_type}: {filename}")
+            else:
+                print(f"BG missing for {enemy_type} ({filename}), using default.")
+
     def load_enemy_images(self):
         """Loads static enemy images or creates fallbacks"""
         print("--- LOADING ENEMY ASSETS ---")
         names = ["Slime", "Goblin", "Skeleton", "Orc", "Demon", "Golem", "Chimera", "Dark Knight", "Dragon", "Demon Lord"]
         images = {}
         
-        # Ensure assets folder exists
         if not os.path.exists("assets"):                                                                                        
             print("WARNING: 'assets' folder not found. Creating fallbacks.")
 
@@ -332,15 +382,11 @@ class Game:
                 print(f"Error loading {filename}: {e}")
 
             if not loaded:
-                # Fallback: Create a colored block with text
                 surf = pygame.Surface((150, 150))
-                # Pick a color based on name hash to make them distinct
                 random.seed(name) 
                 color = (random.randint(50, 200), random.randint(50, 200), random.randint(50, 200))
                 surf.fill(color)
                 pygame.draw.rect(surf, WHITE, (0,0,150,150), 5)
-                
-                # Draw name on surf
                 txt = self.small_font.render(name, True, WHITE)
                 surf.blit(txt, (75 - txt.get_width()//2, 75 - txt.get_height()//2))
                 images[name] = surf
@@ -467,8 +513,8 @@ class Game:
                 
                 elif self.state == STATE_SHOP:
                     if event.key == pygame.K_x: self.state = STATE_HUB
-                    if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 2
-                    if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 2
+                    if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 3
+                    if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 3
 
                 elif self.state == STATE_SAVE_MENU:
                     if event.key == pygame.K_x: self.state = STATE_START 
@@ -479,6 +525,7 @@ class Game:
                     limit = 4
                     if self.battle_menu_state == BATTLE_ATTACK_SELECT: limit = 3
                     elif self.battle_menu_state == BATTLE_SKILLS: limit = len(self.player.skills)
+                    elif self.battle_menu_state == BATTLE_ITEM_SELECT: limit = 2
                     
                     if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % limit
                     if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % limit
@@ -486,21 +533,6 @@ class Game:
                     if event.key == pygame.K_x:
                         if self.battle_menu_state != BATTLE_MAIN:
                             self.battle_menu_state = BATTLE_MAIN; self.menu_index = 0
-
-    def handle_battle_input(self, event):
-        if self.battle_menu_state == BATTLE_MAIN:
-            if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 4
-            if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 4
-            if event.key == pygame.K_RETURN:
-                if self.menu_index == 0: self.execute_attack()
-                elif self.menu_index == 1: self.battle_menu_state = BATTLE_SKILLS; self.menu_index = 0
-                elif self.menu_index == 2: self.execute_potion()
-                elif self.menu_index == 3: self.state = STATE_HUB
-        elif self.battle_menu_state == BATTLE_SKILLS:
-            if event.key == pygame.K_x: self.battle_menu_state = BATTLE_MAIN; self.menu_index = 0
-            if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % len(self.player.skills)
-            if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % len(self.player.skills)
-            if event.key == pygame.K_RETURN: self.execute_skill(self.player.skills[self.menu_index])
 
     def draw_button(self, text, x, y, index, active_color, inactive_color, font=None):
         if font is None: font = self.font
@@ -521,6 +553,12 @@ class Game:
         self.state = STATE_BATTLE
         self.active_battle_level = level
         self.enemy = generate_enemy(level)
+        
+        # --- SELECT BATTLE BACKGROUND ---
+        # Look up the enemy type in our loaded backgrounds map.
+        # If found, use it. If not, fallback to self.bg_battle_default.
+        self.current_battle_bg = self.battle_backgrounds.get(self.enemy.char_type, self.bg_battle_default)
+
         self.floating_texts = []
         self.is_battle_active = True
         self.is_player_turn_ready = False
@@ -616,6 +654,16 @@ class Game:
         else:
              if self.player.sprite: self.spawn_popup("NO POTIONS", GRAY, self.player.sprite.x, self.player.sprite.y)
 
+    def execute_mana_potion(self):
+        if self.player.mana_potions > 0:
+             self.player.mana_potions -= 1
+             self.player.mp = min(self.player.max_mp, self.player.mp + 30)
+             if self.player.sprite: self.spawn_popup("+30 MP", BLUE, self.player.sprite.x, self.player.sprite.y)
+             self.check_win()
+             self.end_player_turn()
+        else:
+             if self.player.sprite: self.spawn_popup("NO MP POTIONS", GRAY, self.player.sprite.x, self.player.sprite.y)
+
     def check_win(self):
         if not self.enemy.is_alive:
              self.is_battle_active = False 
@@ -706,11 +754,15 @@ class Game:
             self.screen.blit(lbl, bg_rect)
 
     def draw_battle(self):
-        if self.bg_battle: 
+        # --- DRAW BATTLE BACKGROUND ---
+        # If the specific BG for this enemy exists, use it.
+        # Otherwise, fall back to default or a solid color.
+        if self.current_battle_bg:
             ox = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity) if self.screen_shake_duration > 0 else 0
             oy = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity) if self.screen_shake_duration > 0 else 0
-            self.screen.blit(self.bg_battle, (ox, oy))
-        else: self.screen.fill((40, 20, 20))
+            self.screen.blit(self.current_battle_bg, (ox, oy))
+        else: 
+            self.screen.fill((40, 20, 20))
 
         self.draw_battle_hint()
         p_rect = None; e_rect = None
@@ -738,13 +790,14 @@ class Game:
         self.screen.blit(self.font.render(f"{self.player.name} (Lv.{self.player.level})", True, WHITE), (50, ui_y + 30))
         self.screen.blit(self.font.render(f"MP: {self.player.mp}/{self.player.max_mp}", True, BLUE), (50, ui_y + 80))
         self.screen.blit(self.font.render(f"Potions: {self.player.potions}", True, YELLOW), (50, ui_y + 130))
+        self.screen.blit(self.font.render(f"Mana Pots: {self.player.mana_potions}", True, CYAN), (50, ui_y + 165))
         
         menu_x = self.WIDTH // 2 - 100
         
         # Only draw menu if player turn is ready
         if self.is_player_turn_ready and self.is_battle_active:
             if self.battle_menu_state == BATTLE_MAIN:
-                opts = ["Attack", "Skills", "Potion", "Flee"]
+                opts = ["Attack", "Skills", "Items", "Flee"]
                 for i, o in enumerate(opts):
                     # We check return value. If True, action taken.
                     if self.draw_button(o, menu_x, ui_y + 30 + i*50, i, YELLOW, GRAY):
@@ -755,7 +808,8 @@ class Game:
                             self.battle_menu_state = BATTLE_SKILLS
                             self.menu_index = 0
                         elif i == 2: 
-                            self.execute_potion()
+                            self.battle_menu_state = BATTLE_ITEM_SELECT
+                            self.menu_index = 0
                         elif i == 3: 
                             self.state = STATE_HUB
                         # CRITICAL FIX: Break loop so we don't process other buttons with the new index
@@ -778,6 +832,19 @@ class Game:
                     if self.draw_button(f"{sk.name} ({sk.cost} MP)", menu_x, ui_y + 40 + i*50, i, color, GRAY):
                         self.execute_skill(sk)
                         break # Break loop
+            
+            elif self.battle_menu_state == BATTLE_ITEM_SELECT:
+                self.screen.blit(self.small_font.render("SELECT ITEM (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
+                
+                # Health Potion Button
+                hp_txt = f"Health Potion ({self.player.potions})"
+                if self.draw_button(hp_txt, menu_x, ui_y + 40, 0, GREEN, GRAY):
+                    self.execute_potion()
+                
+                # Mana Potion Button
+                mp_txt = f"Mana Potion ({self.player.mana_potions})"
+                if self.draw_button(mp_txt, menu_x, ui_y + 90, 1, BLUE, GRAY):
+                    self.execute_mana_potion()
 
         if self.red_flash_alpha > 0:
             flash = pygame.Surface((self.WIDTH, self.HEIGHT))
@@ -814,7 +881,12 @@ class Game:
         title = self.title_font.render("HERO STATISTICS", True, WHITE)
         self.screen.blit(title, (self.WIDTH//2 - title.get_width()//2, 100))
         p = self.player
-        stats = [f"Name: {p.name}", f"Level: {p.level}", f"EXP: {p.exp} / {p.exp_to_next}", f"HP: {p.hp} / {p.max_hp}", f"MP: {p.mp} / {p.max_mp}", f"Attack: {p.atk}", f"Defense: {p.defense}", f"Speed: {p.speed}", f"Gold: {p.gold}", f"Potions: {p.potions}"]
+        stats = [
+            f"Name: {p.name}", f"Level: {p.level}", f"EXP: {p.exp} / {p.exp_to_next}", 
+            f"HP: {p.hp} / {p.max_hp}", f"MP: {p.mp} / {p.max_mp}", f"Attack: {p.atk}", 
+            f"Defense: {p.defense}", f"Speed: {p.speed}", f"Gold: {p.gold}", 
+            f"HP Potions: {p.potions}", f"MP Potions: {p.mana_potions}"
+        ]
         start_y = 250
         for i, s in enumerate(stats):
             txt = self.font.render(s, True, YELLOW if i % 2 == 0 else WHITE)
@@ -891,11 +963,19 @@ class Game:
                 if self.bg_shop: self.screen.blit(self.bg_shop, (0,0))
                 else: self.screen.fill((50, 40, 20))
                 self.screen.blit(self.title_font.render("SHOP", True, YELLOW), (100, 50))
-                ops = [f"Potion (50g) [{self.player.potions}]", f"Upgrade Sword (200g) [{self.player.atk}]"]
+                ops = [
+                    f"Health Potion (50g) [{self.player.potions}]", 
+                    f"Mana Potion (50g) [{self.player.mana_potions}]", 
+                    f"Upgrade Sword (200g) [{self.player.atk}]"
+                ]
                 for i, o in enumerate(ops):
                     if self.draw_button(o, 100, 300 + i*80, i, GREEN, GRAY):
+                        # Health Pot
                         if i == 0 and self.player.gold >= 50: self.player.gold -= 50; self.player.potions += 1
-                        elif i == 1 and self.player.gold >= 200: self.player.gold -= 200; self.player.atk += 5
+                        # Mana Pot
+                        elif i == 1 and self.player.gold >= 50: self.player.gold -= 50; self.player.mana_potions += 1
+                        # Upgrade Sword
+                        elif i == 2 and self.player.gold >= 200: self.player.gold -= 200; self.player.atk += 5
 
             elif self.state == STATE_SAVE_MENU:
                 self.screen.fill((20, 20, 50))
