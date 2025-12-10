@@ -1,1 +1,1 @@
-{"player": {"name": "Hero", "max_hp": 200, "hp": 200, "max_mp": 150, "mp": 150, "atk": 125, "defense": 110, "level": 6, "exp": 15, "exp_to_next": 100, "gold": 250, "potions": 3, "mana_potions": 3, "speed": 40}, "dungeon_unlocked": 10}
+{"player": {"name": "Hero", "max_hp": 200, "hp": 200, "max_mp": 150, "mp": 150, "atk": 125, "defense": 110, "level": 6, "exp": 60, "exp_to_next": 100, "gold": 280, "potions": 3, "mana_potions": 3, "speed": 40}, "dungeon_unlocked": 10}
