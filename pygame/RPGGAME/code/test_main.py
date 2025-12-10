@@ -970,6 +970,8 @@ class Game:
             if self.state == STATE_START:
                 if self.bg_start: self.screen.blit(self.bg_start, (0,0))
                 else: self.screen.fill(BLACK)
+                
+                # --- DRAW BOX BEHIND TITLE ---
                 t = self.title_font.render("HERO'S JOURNEY", True, YELLOW)
                 self.screen.blit(t, (self.WIDTH//2 - t.get_width()//2, self.HEIGHT * 0.2))
                 opts = ["New Game", "Load Game", "Quit"]
