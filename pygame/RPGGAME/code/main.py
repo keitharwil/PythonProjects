@@ -1,80 +1,124 @@
 import pygame
 import sys
+import json
+import os
+import random
 from pathlib import Path
-from spritesheet import Spritesheet
 from os.path import join
+
+# --- IMPORT SPRITESHEET HELPER ---
+try:
+    from spritesheet import Spritesheet
+except ImportError:
+    print("Warning: spritesheet.py not found. Player sprites will not load.")
+    Spritesheet = None
 
 pygame.init()
 
-# Constants
-WINDOW_WIDTH, WINDOW_HEIGHT = 1920, 1080
+# --- CONSTANTS ---
 FPS = 60
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (100, 100, 100)
-LIGHT_GRAY = (200, 200, 200)
+DARK_GRAY = (50, 50, 50)
 RED = (220, 50, 50)
 GREEN = (50, 220, 50)
 BLUE = (50, 150, 220)
 YELLOW = (255, 215, 0)
+PURPLE = (150, 50, 220)
+CYAN = (0, 255, 255)
+ORANGE = (255, 165, 0)
 
-# Game states
-STATE_VISUAL_NOVEL = "visual_novel"
+ATB_MAX = 100
+ATB_BAR_WIDTH = 80
+ATB_BAR_HEIGHT = 8
+
+# Zones
+ZONE_UPPER = "High"
+ZONE_MID = "Mid"
+ZONE_LOWER = "Low"
+
+# Game States
+STATE_START = "start_menu"
+STATE_HUB = "hub"
+STATE_STATS = "stats_menu"
+STATE_SHOP = "shop"
+STATE_DUNG_SELECT = "dungeon_select"
 STATE_BATTLE = "battle"
-STATE_MENU = "menu"
+STATE_VICTORY = "victory"
+STATE_GAME_OVER = "game_over"
+STATE_SAVE_MENU = "save_menu"
+STATE_DIALOGUE = "dialogue"
+STATE_INTRO_PART_2 = "intro_part_2" 
+STATE_ENDING_PART_2 = "ending_part_2"
+
+BATTLE_MAIN = "main_menu"
+BATTLE_ATTACK_SELECT = "attack_select"
+BATTLE_SKILLS = "skills_menu"
+BATTLE_ITEM_SELECT = "item_select"
+
+# --- HELPER CLASSES ---
+
+class FloatingText:
+    def __init__(self, text, x, y, color, size=40):
+        self.text = str(text)
+        self.x = x
+        self.y = y
+        self.color = color
+        self.timer = 1.5 
+        self.font = pygame.font.Font(None, size)
+        self.dy = -1 
+        self.alpha = 255
+
+    def update(self, dt):
+        self.y += self.dy * (dt * 60) 
+        self.timer -= dt
+        if self.timer < 0.5:
+            self.alpha = max(0, int(255 * (self.timer / 0.5)))
+
+    def draw(self, surface):
+        if self.timer > 0:
+            txt_surf = self.font.render(self.text, True, self.color)
+            txt_surf.set_alpha(self.alpha)
+            outline = self.font.render(self.text, True, BLACK)
+            outline.set_alpha(self.alpha)
+            surface.blit(outline, (self.x + 2, self.y + 2))
+            surface.blit(txt_surf, (self.x, self.y))
+
+# --- SPRITE CLASSES ---
 
 class SpriteSheetAnimations:
-    def __init__(self, spritesheet_path):
-        # Initialize spritesheet with 80x64 sprite size
-        self.sheet = Spritesheet(
-            filepath=Path(join("assets", "WarriorMan-Sheet.png")),
-            sprite_size=(80, 64),
-            spacing=(0, 0),
-            scale=(256, 256)  # Scale to 4x size
-        )
-        self.animations = self.parse_spritesheet()
-    
+    def __init__(self):
+        self.animations = {}
+        if Spritesheet:
+            try:
+                self.sheet = Spritesheet(
+                    filepath=Path(join("assets", "WarriorMan-Sheet.png")),
+                    sprite_size=(80, 64),
+                    spacing=(0, 0),
+                    scale=(256, 256) 
+                )
+                self.animations = self.parse_spritesheet()
+            except Exception as e:
+                print(f"Error loading spritesheet: {e}")
+
     def parse_spritesheet(self):
-        # Define animations with their row and frame count
-        animations = {}
-        
-        # Walking animations (8 frames each)
-        animations['walk_down'] = self.sheet.get_sprites([(0, i) for i in range(8)])
-        animations['walk_left'] = self.sheet.get_sprites([(1, i) for i in range(8)])
-        animations['walk_right'] = self.sheet.get_sprites([(2, i) for i in range(8)])
-        animations['walk_up'] = self.sheet.get_sprites([(3, i) for i in range(8)])
-        
-        # Attack animations
-        animations['attack_down'] = self.sheet.get_sprites([(11, i) for i in range(8)])
-        animations['attack_left'] = self.sheet.get_sprites([(5, i) for i in range(6)])
-        animations['attack_right'] = self.sheet.get_sprites([(6, i) for i in range(5)])
-        animations['attack_up'] = self.sheet.get_sprites([(7, i) for i in range(5)])
-        
-        # Cast spell animations
-        animations['cast_down'] = self.sheet.get_sprites([(8, i) for i in range(10)])
-        animations['cast_left'] = self.sheet.get_sprites([(9, i) for i in range(7)])
-        animations['cast_right'] = self.sheet.get_sprites([(10, i) for i in range(5)])
-        animations['cast_up'] = self.sheet.get_sprites([(11, i) for i in range(8)])
-        
-        # Death animation
-        animations['death'] = self.sheet.get_sprites([(26, i) for i in range(7)])
-        
-        # Idle animations (first frame of walk)
-        animations['idle_down'] = [animations['walk_down'][0]]
-        animations['idle_left'] = [animations['walk_left'][0]]
-        animations['idle_right'] = [animations['walk_right'][0]]
-        animations['idle_up'] = [animations['walk_up'][0]]
-        
-        return animations
+        anim = {}
+        anim['idle_down'] = self.sheet.get_sprites([(0, i) for i in range(8)])
+        anim['attack_down'] = self.sheet.get_sprites([(11, i) for i in range(8)])
+        anim['cast_down'] = self.sheet.get_sprites([(13, i) for i in range(13)])
+        anim['death'] = self.sheet.get_sprites([(26, i) for i in range(7)])
+        return anim
 
 class AnimatedSprite:
-    def __init__(self, spritesheet, x, y):
-        self.spritesheet = spritesheet
+    """For the Player (Uses Spritesheet)"""
+    def __init__(self, animation_manager, x, y):
+        self.manager = animation_manager
         self.x = x
         self.y = y
         self.current_animation = 'idle_down'
         self.frame_index = 0
-        self.animation_speed = 0.05
+        self.animation_speed = 0.1
         self.animation_timer = 0
         self.loop = True
         self.animation_finished = False
@@ -88,13 +132,11 @@ class AnimatedSprite:
             self.animation_finished = False
     
     def update(self, dt):
-        if self.spritesheet and self.spritesheet.animations:
+        if self.manager and self.manager.animations and self.current_animation in self.manager.animations:
             self.animation_timer += dt
-            
+            frames = self.manager.animations[self.current_animation]
             if self.animation_timer >= self.animation_speed:
                 self.animation_timer = 0
-                frames = self.spritesheet.animations[self.current_animation]
-                
                 if self.frame_index < len(frames) - 1:
                     self.frame_index += 1
                 elif self.loop:
@@ -103,501 +145,1098 @@ class AnimatedSprite:
                     self.animation_finished = True
     
     def draw(self, surface):
-        if self.spritesheet and self.spritesheet.animations:
-            frames = self.spritesheet.animations[self.current_animation]
-            if frames:
-                frame = frames[int(self.frame_index)]
-                surface.blit(frame, (self.x, self.y))
+        rect = pygame.Rect(self.x - 40, self.y - 40, 80, 80)
+        if self.manager and self.manager.animations and self.current_animation in self.manager.animations:
+            frames = self.manager.animations[self.current_animation]
+            idx = int(self.frame_index) % len(frames)
+            frame = frames[idx]
+            rect = frame.get_rect(center=(self.x, self.y))
+            surface.blit(frame, rect)
         else:
-            # Fallback if no spritesheet
-            pygame.draw.circle(surface, GREEN, (int(self.x + 32), int(self.y + 32)), 30)
+            pygame.draw.rect(surface, GREEN, rect)
+        return rect
+
+class StaticSprite:
+    """For Enemies (Uses Single Image)"""
+    def __init__(self, image, x, y):
+        self.image = image
+        self.x = x
+        self.y = y
+        # FORCE INT: Pygame sometimes crashes if these are floats
+        self.rect = self.image.get_rect(center=(int(x), int(y)))
+        self.animation_finished = True 
+
+    def set_animation(self, animation_name, loop=True):
+        pass
+
+    def update(self, dt):
+        pass
+
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)
+        return self.rect
+# --- RPG CLASSES ---
+class Skill:
+    def __init__(self, name, cost, power, type="damage", element="physical"):
+        self.name = name; self.cost = cost; self.power = power; self.type = type
+        self.element = element
 
 class Character:
-    def __init__(self, name, hp, max_hp, atk, defense, sprite=None):
+    def __init__(self, name, hp, mp, atk, defense, is_player=False, char_type="Human"):
         self.name = name
-        self.hp = hp
-        self.max_hp = max_hp
-        self.atk = atk
-        self.defense = defense
-        self.is_alive = True
-        self.sprite = sprite
-    
+        self.max_hp = hp; self.hp = hp
+        self.max_mp = mp; self.mp = mp
+        self.atk = atk; self.defense = defense
+        self.is_alive = True; self.is_player = is_player
+        self.sprite = None
+        self.char_type = char_type 
+        
+        self.level = 1; self.exp = 0; self.exp_to_next = 100; self.gold = 0
+        self.potions = 3
+        self.mana_potions = 1 
+        
+        self.atb = 0
+        self.speed = 20
+        
+        self.skills = []
+        if is_player:
+            self.skills.append(Skill("Heal", 10, 30, "heal", "magic"))
+            self.skills.append(Skill("Fireball", 15, 2.0, "damage", "magic"))
+
+
     def take_damage(self, damage):
-        actual_damage = max(1, damage - self.defense)
-        self.hp = max(0, self.hp - actual_damage)
-        if self.hp == 0:
-            self.is_alive = False
-        return actual_damage
+        actual = max(0, damage - self.defense)
+        self.hp = max(0, self.hp - actual)
+        if self.hp == 0: self.is_alive = False
+        return actual
     
-    def heal(self, amount):
-        self.hp = min(self.max_hp, self.hp + amount)
+    def heal(self, amount): self.hp = min(self.max_hp, self.hp + amount)
+    
+    def gain_exp(self, amount):
+        if not self.is_player: return False
+        self.exp += amount
+        leveled = False
+        while self.exp >= self.exp_to_next:
+            self.exp -= self.exp_to_next; self.level += 1; self.max_hp += 20; self.max_mp += 10
+            self.hp = self.max_hp; self.mp = self.max_mp; self.atk += 5; self.defense += 2
+            self.speed += 2
+            leveled = True
+        return leveled
 
-class VisualNovelScene:
-    def __init__(self, text, character_name, next_scene=None, choices=None):
-        self.text = text
-        self.character_name = character_name
-        self.next_scene = next_scene
-        self.choices = choices or []
-        self.current_char = 0
-        self.text_speed = 2
-        self.full_text_shown = False
+    def to_dict(self): 
+        return {
+            "name": self.name, "max_hp": self.max_hp, "hp": self.hp, 
+            "max_mp": self.max_mp, "mp": self.mp, "atk": self.atk, 
+            "defense": self.defense, "level": self.level, "exp": self.exp, 
+            "exp_to_next": self.exp_to_next, "gold": self.gold, 
+            "potions": self.potions, "mana_potions": self.mana_potions,
+            "speed": self.speed
+        }
     
-    def update(self):
-        if not self.full_text_shown:
-            self.current_char = min(len(self.text), self.current_char + self.text_speed)
-            if self.current_char >= len(self.text):
-                self.full_text_shown = True
-    
-    def get_displayed_text(self):
-        return self.text[:self.current_char]
-    
-    def skip_text(self):
-        self.current_char = len(self.text)
-        self.full_text_shown = True
+    def load_from_dict(self, d): 
+        self.name = d["name"]; self.max_hp = d["max_hp"]; self.hp = d["hp"]
+        self.max_mp = d.get("max_mp", 50); self.mp = d.get("mp", 50)
+        self.atk = d["atk"]; self.defense = d["defense"]
+        self.level = d["level"]; self.exp = d["exp"]; self.exp_to_next = d["exp_to_next"]
+        self.gold = d["gold"]; self.potions = d["potions"]
+        self.mana_potions = d.get("mana_potions", 0)
+        self.speed = d.get("speed", 20)
 
+def generate_enemy(level):
+    types = [
+        "Slime", "Goblin", "Skeleton", "Orc", "Demon",
+        "Golem", "Chimera", "Dark Knight", "Dragon", "Demon Lord"
+    ]
+    idx = min(level-1, 9)
+    c_type = types[idx]
+    
+    hp = 30 + (level * level * 5)
+    atk = 5 + (level * 6)
+    defense = level * 3
+    speed = 15 + (level * 3)
+    
+    if c_type == "Golem": defense *= 2; speed -= 5
+    if c_type == "Chimera": speed += 15; hp = int(hp * 0.8)
+    if c_type == "Dark Knight": defense += 10; hp += 50
+    if c_type == "Dragon": hp += 150; atk += 10
+    if c_type == "Demon Lord": hp = 1500; atk = 70; speed = 50; defense = 20
+    
+    enemy = Character(c_type, hp, 0, atk, defense, is_player=False, char_type=c_type)
+    enemy.speed = speed
+    enemy.exp_reward = 20 + (level*25); enemy.gold_reward = 10 + (level*20)
+    return enemy
+
+# --- GAME CLASS ---
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-        self.screen_width = self.screen.get_width()
-        self.screen_height = self.screen.get_height()
-        pygame.display.set_caption("Visual Novel JRPG")
+        self.WIDTH, self.HEIGHT = self.screen.get_size()
+        pygame.display.set_caption("RPG ATB System")
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 48)
-        self.small_font = pygame.font.Font(None, 32)
-        self.state = STATE_VISUAL_NOVEL
         
-        # Load spritesheet (replace with your file path)
-        self.player_spritesheet = SpriteSheetAnimations('character_spritesheet.png')
+        self.title_font = pygame.font.Font(None, int(self.HEIGHT * 0.12))
+        self.font = pygame.font.Font(None, int(self.HEIGHT * 0.05))
+        self.small_font = pygame.font.Font(None, int(self.HEIGHT * 0.03))
         
-        # Load backgrounds (optional - set to None to use solid colors)
-        try:
-            self.vn_background = pygame.image.load('vn_background.png').convert()
-            self.vn_background = pygame.transform.scale(self.vn_background, (self.screen_width, self.screen_height))
-        except:
-            self.vn_background = None
+        # Load Player Animations
+        self.anim_manager = SpriteSheetAnimations()
         
-        try:
-            self.battle_background = pygame.image.load('battle_background.png').convert()
-            self.battle_background = pygame.transform.scale(self.battle_background, (self.screen_width, self.screen_height))
-        except:
-            self.battle_background = None
-        
-        # Initialize scenes
-        self.init_scenes()
-        self.current_scene_key = "intro"
-        
-        # Battle system
-        player_sprite = AnimatedSprite(self.player_spritesheet, 100, 150)
-        self.player = Character("Hero", 100, 100, 25, 5, sprite=player_sprite)
-        self.enemy = None
-        self.battle_menu_index = 0
-        self.battle_log = []
-        self.battle_phase = "player_turn"
-        self.battle_animation_playing = False
-        
-        # Screen effects
-        self.screen_shake_duration = 0
-        self.screen_shake_intensity = 0
-        self.red_flash_alpha = 0
-        
-    def init_scenes(self):
-        self.scenes = {
-            "intro": VisualNovelScene(
-                "Welcome, brave hero! The kingdom is in danger. Will you help us?",
-                "Elder",
-                choices=[
-                    ("Yes, I will help!", "accept"),
-                    ("Tell me more first", "more_info")
-                ]
-            ),
-            "accept": VisualNovelScene(
-                "Excellent! A monster has been spotted nearby. Prepare for battle!",
-                "Elder",
-                next_scene="battle_start"
-            ),
-            "more_info": VisualNovelScene(
-                "Dark forces have awakened. Only you can stop them!",
-                "Elder",
-                choices=[
-                    ("I'm ready to fight!", "accept"),
-                    ("I need to think about it", "intro")
-                ]
-            ),
-            "battle_start": VisualNovelScene(
-                "A wild Goblin appears! Get ready to fight!",
-                "System",
-                next_scene="enter_battle"
-            ),
-            "victory": VisualNovelScene(
-                "You defeated the monster! The village is safe... for now.",
-                "Elder",
-                next_scene="intro"
-            ),
-            "defeat": VisualNovelScene(
-                "You have been defeated... Try again, hero!",
-                "System",
-                next_scene="intro"
-            )
+        # Load Main Backgrounds
+        self.bg_start = self.load_background("bg_start.png")
+        self.bg_hub = self.load_background("bg_hub.png")
+        self.bg_battle_default = self.load_background("bg_battle.png") 
+        self.bg_shop = self.load_background("bg_shop.png")
+
+        # --- BATTLE BACKGROUNDS CONFIG ---
+        self.battle_bg_config = {
+            "Slime": "bg_forest.png",
+            "Goblin": "bg_forest.png",
+            "Skeleton": "bg_graveyard.png",
+            "Orc": "bg_forest.png",
+            "Demon": "bg_castle_entrance.png",
+            "Golem": "bg_mountains.png",
+            "Chimera": "bg_mountains.png",
+            "Dark Knight": "bg_demon_castle.png",
+            "Dragon": "bg_dragon_lair.png",
+            "Demon Lord": "bg_demon_castle.png"
         }
-    
-    def start_battle(self):
-        self.state = STATE_BATTLE
-        player_sprite = AnimatedSprite(self.player_spritesheet, self.screen_width // 4, self.screen_height // 2)
-        enemy_sprite = AnimatedSprite(self.player_spritesheet, 3 * self.screen_width // 4, self.screen_height // 2)
-        self.enemy = Character("Goblin", 60, 60, 15, 3, sprite=enemy_sprite)
-        self.player.hp = self.player.max_hp
-        self.player.sprite.set_animation('idle_down')
-        self.battle_menu_index = 0
-        self.battle_log = ["Battle started!"]
-        self.battle_phase = "player_turn"
-        self.battle_animation_playing = False
+        self.battle_backgrounds = {}
+        self.load_all_battle_backgrounds()
+        self.current_battle_bg = self.bg_battle_default 
+
+        # --- DIALOGUE BACKGROUND CONFIG ---
+        self.dialogue_bg_map = {
+            "intro_goddess": "bg_goddess_shrine.png", 
+            "intro_king": "bg_throne_room.png",      
+            "level_1_clear": "bg_slime_cave.png",
+            "level_2_clear": "bg_goblin_camp.png",
+            "level_3_clear": "bg_crypt.png",
+            "level_4_clear": "bg_orc_pit.png",
+            "level_5_clear": "bg_demon_hall.png",
+            "level_6_clear": "bg_golem_ruins.png",
+            "level_7_clear": "bg_chimera_nest.png",
+            "level_8_clear": "bg_dark_castle.png",
+            "level_9_clear": "bg_dragon_lair.png",
+            "level_10_clear": "bg_final_victory.png",
+            "ending_monologue": "bg_final_victory.png"
+        }
+        self.current_dialogue_bg = None
+
+        # Load Enemy Images (Static)
+        self.enemy_images = self.load_enemy_images()
+
+        # --- LOAD STORY PORTRAITS ---
+        self.portraits = self.load_portrait_images()
+
+        self.state = STATE_START
+        self.player = Character("Hero", 100, 50, 20, 5, is_player=True)
+        self.current_dungeon_depth = 1
+        self.active_battle_level = 1
+        self.enemy = None
+        
+        self.menu_index = 0
+        self.is_saving = False
+        self.battle_menu_state = BATTLE_MAIN
         self.screen_shake_duration = 0
-        self.screen_shake_intensity = 0
         self.red_flash_alpha = 0
-    
-    def add_screen_shake(self, duration, intensity):
-        """Add screen shake effect."""
-        self.screen_shake_duration = duration
-        self.screen_shake_intensity = intensity
-    
-    def add_red_flash(self, alpha):
-        """Add red flash effect."""
-        self.red_flash_alpha = alpha
-    
-    def update_screen_effects(self, dt):
-        """Update screen shake and flash effects."""
-        # Update screen shake
-        if self.screen_shake_duration > 0:
-            self.screen_shake_duration -= dt
-            if self.screen_shake_duration < 0:
-                self.screen_shake_duration = 0
+        self.victory_data = {}
         
-        # Update red flash
-        if self.red_flash_alpha > 0:
-            self.red_flash_alpha -= dt * 400  # Fade out speed
-            if self.red_flash_alpha < 0:
-                self.red_flash_alpha = 0
+        self.is_battle_active = False 
+        self.is_player_turn_ready = False 
+        
+        self.enemy_blocked_zones = []
+        self.demon_barrier_active = False
+        self.mechanic_timer = 0
+        self.mechanic_interval = 3.0
+        self.floating_texts = []
+        
+        self.mouse_click_pos = None
+        self.key_pressed_enter = False
+
+        # --- DIALOGUE SYSTEM VARIABLES ---
+        self.dialogue_queue = [] 
+        self.dialogue_index = 0
+        self.dialogue_next_state = STATE_HUB
+
+    def load_background(self, filename):
+        try:
+            path = Path(join("assets", filename))
+            if path.exists():
+                img = pygame.image.load(path).convert()
+                return pygame.transform.scale(img, (self.WIDTH, self.HEIGHT))
+        except:
+            pass
+        return None
+
+    def load_all_battle_backgrounds(self):
+        for enemy_type, filename in self.battle_bg_config.items():
+            bg = self.load_background(filename)
+            if bg: self.battle_backgrounds[enemy_type] = bg
+
+    def load_enemy_images(self):
+        """Loads static enemy images or creates fallbacks"""
+        names = ["Slime", "Goblin", "Skeleton", "Orc", "Demon", "Golem", "Chimera", "Dark Knight", "Dragon", "Demon Lord"]
+        images = {}
+        if not os.path.exists("assets"): print("WARNING: 'assets' folder not found. Creating fallbacks.")
+        for name in names:
+            filename = f"{name}.png"
+            path = Path(join("assets", filename))
+            loaded = False
+            try:
+                if path.exists():
+                    img = pygame.image.load(path).convert_alpha()
+                    scale = 0.8
+                    w, h = img.get_width() * scale, img.get_height() * scale
+                    images[name] = pygame.transform.scale(img, (w, h))
+                    loaded = True
+            except: pass
+            if not loaded:
+                surf = pygame.Surface((150, 150))
+                random.seed(name) 
+                color = (random.randint(50, 200), random.randint(50, 200), random.randint(50, 200))
+                surf.fill(color)
+                pygame.draw.rect(surf, WHITE, (0,0,150,150), 5)
+                txt = self.small_font.render(name, True, WHITE)
+                surf.blit(txt, (75 - txt.get_width()//2, 75 - txt.get_height()//2))
+                images[name] = surf
+        return images
+
+    def load_portrait_images(self):
+        """Loads larger portraits for dialogue"""
+        print("--- LOADING STORY PORTRAITS ---")
+        portraits = {}
+        config = {
+            "Hero": "Portrait_Hero.png",
+            "King": "Portrait_King.png",
+            "Goddess": "Portrait_Goddess.png"
+        }
+        
+        for char_name, filename in config.items():
+            loaded = False
+            try:
+                path = Path(join("assets", filename))
+                if path.exists():
+                    img = pygame.image.load(path).convert_alpha()
+                    # Scale factor logic (Adjust 300 to change height)
+                    scale_factor = 300 / img.get_height()
+                    new_size = (int(img.get_width() * scale_factor), 300)
+                    portraits[char_name] = pygame.transform.scale(img, new_size)
+                    loaded = True
+            except: pass
+            
+            if not loaded:
+                surf = pygame.Surface((200, 300))
+                if char_name == "Hero": surf.fill(BLUE)
+                elif char_name == "King": surf.fill(RED)
+                elif char_name == "Goddess": surf.fill(YELLOW)
+                txt = self.font.render(char_name, True, WHITE)
+                surf.blit(txt, (100 - txt.get_width()//2, 150))
+                portraits[char_name] = surf
+        
+        return portraits
+
+    # --- STORY / DIALOGUE DATA ---
+    def get_dialogue_data(self, scene_id):
+        script = []
+        
+        # --- SPLIT INTRO INTO TWO PARTS ---
+        if scene_id == "intro_goddess":
+            script = [
+                {"name": "???", "text": "Awaken... chosen one...", "sprite": "Goddess"},
+                {"name": "Goddess", "text": "The darkness is rising. The Demon Lord has returned to the Spire.", "sprite": "Goddess"},
+                {"name": "Goddess", "text": "You must find your strength. The King awaits you.", "sprite": "Goddess"},
+            ]
+        elif scene_id == "intro_king":
+            script = [
+                {"name": "King", "text": "Ah, you have arrived! The prophecy spoke of a warrior in blue.", "sprite": "King"},
+                {"name": "King", "text": "Our village is under siege. Monsters dwell in the 10 floors of the Demon Castle.", "sprite": "King"},
+                {"name": "Hero", "text": "I will do what I can, your majesty.", "sprite": "Hero"},
+                {"name": "King", "text": "Take this sword. Clear the floors. Save us all!", "sprite": "King"},
+            ]
+        # ----------------------------------
+        
+        elif scene_id == "level_1_clear": # Slime
+            script = [
+                {"name": "Hero", "text": "Just a Slime. Hardly a challenge.", "sprite": "Hero"},
+                {"name": "Hero", "text": "But the air gets heavier further down...", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_2_clear": # Goblin
+            script = [
+                {"name": "Goblin", "text": "Grah! How... could I lose?", "sprite": "Goblin"},
+                {"name": "Hero", "text": "They are getting smarter. It was blocking my attacks.", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_3_clear": # Skeleton
+            script = [
+                {"name": "Hero", "text": "Undead... magic seems to work best on these bones.", "sprite": "Hero"},
+                {"name": "Hero", "text": "The crypts are silent again.", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_4_clear": # Orc
+            script = [
+                {"name": "Orc", "text": "ME... CRUSH... YOU... NEXT... TIME...", "sprite": "Orc"},
+                {"name": "Hero", "text": "Such brute strength. I need to keep my armor upgraded.", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_5_clear": # Demon
+            script = [
+                {"name": "Demon", "text": "You break my barrier? Impossible mortal!", "sprite": "Demon"},
+                {"name": "Hero", "text": "Dark magic barriers... I must save my MP for these.", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_6_clear": # Golem
+            script = [
+                {"name": "Hero", "text": "My sword barely scratched it. Magic was the key.", "sprite": "Hero"},
+                {"name": "King", "text": "Incredible! You defeated the Stone Guardian!", "sprite": "King"}
+            ]
+        elif scene_id == "level_7_clear": # Chimera
+            script = [
+                {"name": "Hero", "text": "A beast of chaos. It guarded its weak points well.", "sprite": "Hero"},
+                {"name": "Hero", "text": "Only three floors remain...", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_8_clear": # Dark Knight
+            script = [
+                {"name": "Dark Knight", "text": "You... remind me... of who I once was...", "sprite": "Dark Knight"},
+                {"name": "Hero", "text": "A fallen hero? Is this my fate if I fail?", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_9_clear": # Dragon
+            script = [
+                {"name": "Dragon", "text": "ROAAAAAR! The Master... will end... you...", "sprite": "Dragon"},
+                {"name": "Hero", "text": "The heat was unbearable. The Demon Lord is next.", "sprite": "Hero"},
+                {"name": "King", "text": "The final battle approaches! Stock up on potions!", "sprite": "King"}
+            ]
+        elif scene_id == "level_10_clear": # Demon Lord
+            script = [
+                {"name": "Demon Lord", "text": "How? I am eternal! The darkness... cannot die!", "sprite": "Demon Lord"},
+                {"name": "Hero", "text": "It is over. The dawn returns.", "sprite": "Hero"},
+                {"name": "Goddess", "text": "Well done, Chosen One. Peace is restored.", "sprite": "Goddess"},
+                {"name": "King", "text": "You are the Savior of the Realm! A feast in your honor!", "sprite": "King"},
+            ]
+        
+        elif scene_id == "ending_monologue": # <--- NEW FINAL SCENE
+            script = [
+                 {"name": "Hero", "text": "(My journey ends here... for now.)", "sprite": "Hero"}
+            ]
+            
+        return script
+
+    def start_dialogue(self, scene_id, next_state=STATE_HUB):
+        self.dialogue_queue = self.get_dialogue_data(scene_id)
+        if not self.dialogue_queue:
+            # If no dialogue for this scene, skip directly to next state
+            self.state = next_state
+            return
+            
+        self.dialogue_index = 0
+        self.dialogue_next_state = next_state
+        
+        # --- BACKGROUND LOADING FOR DIALOGUE ---
+        bg_file = self.dialogue_bg_map.get(scene_id)
+        self.current_dialogue_bg = None
+        if bg_file:
+            loaded_bg = self.load_background(bg_file)
+            if loaded_bg:
+                self.current_dialogue_bg = loaded_bg
+            else:
+                self.current_dialogue_bg = self.bg_hub 
+        else:
+            self.current_dialogue_bg = self.bg_hub 
+            
+        self.state = STATE_DIALOGUE
+
+    def reset_game(self):
+        self.player = Character("Hero", 100, 50, 20, 5, is_player=True)
+        self.current_dungeon_depth = 1
+        # Start with Goddess Intro, which then triggers King Intro
+        self.start_dialogue("intro_goddess", STATE_INTRO_PART_2)
+
+    def get_save_path(self, slot): return f"savegame_{slot}.json"
+    def save_game(self, slot):
+        data = {"player": self.player.to_dict(), "dungeon_unlocked": self.current_dungeon_depth}
+        try:
+            with open(self.get_save_path(slot), 'w') as f: json.dump(data, f)
+        except: pass
+    def load_game(self, slot):
+        path = self.get_save_path(slot)
+        if not os.path.exists(path): return False
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+            self.player.load_from_dict(data["player"])
+            self.current_dungeon_depth = data.get("dungeon_unlocked", 1)
+            self.player.is_alive = True 
+            if self.player.hp <= 0: self.player.hp = 1
+            self.state = STATE_HUB
+            return True
+        except: return False
+
+    def spawn_popup(self, text, color, x, y):
+        offset_x = 40; offset_y = -50 
+        popup = FloatingText(text, x + offset_x, y + offset_y, color)
+        self.floating_texts.append(popup)
+
+    def update_atb(self, dt):
+        if not self.is_battle_active: return
+
+        if self.player.atb < ATB_MAX:
+            self.player.atb += self.player.speed * dt
+            if self.player.atb >= ATB_MAX:
+                self.player.atb = ATB_MAX
+                self.is_player_turn_ready = True
+                self.menu_index = 0
+                self.battle_menu_state = BATTLE_MAIN
+
+        if self.enemy.atb < ATB_MAX and self.enemy.is_alive:
+            self.enemy.atb += self.enemy.speed * dt
+            if self.enemy.atb >= ATB_MAX:
+                self.enemy.atb = 0 
+                self.enemy_attack_trigger()
+
+    def update_battle_mechanics(self, dt):
+        for txt in self.floating_texts[:]:
+            txt.update(dt)
+            if txt.timer <= 0: self.floating_texts.remove(txt)
+
+        if self.state == STATE_BATTLE and self.enemy and self.enemy.is_alive:
+            self.mechanic_timer -= dt
+            
+            if self.mechanic_timer <= 0:
+                c_type = self.enemy.char_type
+                zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
+
+                # --- 1. SET NEXT TIMER DURATION ---
+                # Default for Goblin/Orc/etc is 3.0 seconds
+                next_time = 3.0
+                
+                # Demon Lord gets a random time between 6 and 10 seconds
+                if c_type == "Demon Lord":
+                    next_time = random.uniform(10.0, 15.0)
+                
+                self.mechanic_timer = next_time
+
+                # --- 2. APPLY MECHANICS ---
+                if c_type in ["Goblin", "Chimera"]: 
+                    self.enemy_blocked_zones = [random.choice(zones)]
+                
+                elif c_type in ["Orc", "Dark Knight", "Dragon"]:
+                    open_spot = random.choice(zones)
+                    self.enemy_blocked_zones = [z for z in zones if z != open_spot]
+                
+                elif c_type == "Demon Lord":
+                    # If barrier is down, restore it
+                    if not self.demon_barrier_active:
+                        self.demon_barrier_active = True
+                        # Clear blocked zones because Barrier provides total immunity
+                        self.enemy_blocked_zones = []
+                        if self.enemy.sprite:
+                            self.spawn_popup("BARRIER RESTORED!", PURPLE, self.enemy.sprite.x, self.enemy.sprite.y)
+                    else:
+                        # If barrier is already active, we can shuffle his physical guard behind the barrier
+                        # or just leave it. Let's make him change stance behind the barrier:
+                        open_spot = random.choice(zones)
+                        self.enemy_blocked_zones = [z for z in zones if z != open_spot]
     
-    def get_screen_shake_offset(self):
-        """Get current screen shake offset."""
-        if self.screen_shake_duration > 0:
-            import random
-            offset_x = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity)
-            offset_y = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity)
-            return offset_x, offset_y
-        return 0, 0
+    def enemy_attack_trigger(self):
+        # Enemy is static, no animation call needed, maybe a shake?
+        dmg = self.player.take_damage(self.enemy.atk)
+        if self.player.sprite: self.spawn_popup(str(dmg), RED, self.player.sprite.x, self.player.sprite.y)
+        self.add_red_flash(150)
+        self.add_screen_shake(0.3, 10)
+        if not self.player.is_alive:
+            self.is_battle_active = False
+            if self.player.sprite: self.player.sprite.set_animation("death", loop=False)
+            return
+
+    def add_screen_shake(self, d, i): self.screen_shake_duration = d; self.screen_shake_intensity = i
+    def add_red_flash(self, a): self.red_flash_alpha = a
     
-    def draw_text_box(self, text, x, y, width, height):
-        bg_surface = pygame.Surface((width, height))
-        bg_surface.set_alpha(50)  # Transparency level (0-255)
-        bg_surface.fill(BLACK)     # Color of the background
+    def draw_hp_bar(self, surface, sprite_rect, current, max_val, color):
+        if not sprite_rect: return
+        bar_w, bar_h = 100, 10
+        x = sprite_rect.centerx - bar_w // 2
+        y = sprite_rect.top - 20 
+        ratio = current / max_val
+        pygame.draw.rect(surface, GRAY, (x, y, bar_w, bar_h))
+        pygame.draw.rect(surface, color, (x, y, int(bar_w * ratio), bar_h))
+        pygame.draw.rect(surface, WHITE, (x, y, bar_w, bar_h), 2)
+    
+    def draw_atb_bar(self, surface, sprite_rect, current, max_val):
+        if not sprite_rect: return
+        x = sprite_rect.centerx - ATB_BAR_WIDTH // 2
+        y = sprite_rect.bottom + 10 
+        ratio = current / max_val
+        bar_color = CYAN
+        if current >= max_val: bar_color = YELLOW
+        pygame.draw.rect(surface, DARK_GRAY, (x, y, ATB_BAR_WIDTH, ATB_BAR_HEIGHT))
+        pygame.draw.rect(surface, bar_color, (x, y, int(ATB_BAR_WIDTH * ratio), ATB_BAR_HEIGHT))
+        pygame.draw.rect(surface, WHITE, (x, y, ATB_BAR_WIDTH, ATB_BAR_HEIGHT), 1)
 
-        self.screen.blit(bg_surface, (x, y))
+    def handle_input(self):
+        self.mouse_click_pos = None
+        self.key_pressed_enter = False
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+            if event.type == pygame.USEREVENT + 2: self.trigger_victory_screen()
+            
+            if event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1: self.mouse_click_pos = event.pos
 
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_z or event.key == pygame.K_RETURN: 
+                    self.key_pressed_enter = True
+                
+                if self.state == STATE_START:
+                    if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 3
+                    if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 3
 
+                elif self.state == STATE_HUB:
+                    if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 6
+                    if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 6
+                
+                elif self.state == STATE_DUNG_SELECT:
+                    if event.key == pygame.K_x: self.state = STATE_HUB
+                    if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 10
+                    if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 10
+                
+                elif self.state == STATE_SHOP:
+                    if event.key == pygame.K_x: self.state = STATE_HUB
+                    if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 3
+                    if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 3
+
+                elif self.state == STATE_SAVE_MENU:
+                    if event.key == pygame.K_x: self.state = STATE_START 
+                    if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 3
+                    if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % 3
+
+                elif self.state == STATE_BATTLE and self.is_player_turn_ready:
+                    limit = 4
+                    if self.battle_menu_state == BATTLE_ATTACK_SELECT: limit = 3
+                    elif self.battle_menu_state == BATTLE_SKILLS: limit = len(self.player.skills)
+                    elif self.battle_menu_state == BATTLE_ITEM_SELECT: limit = 2
+                    
+                    if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % limit
+                    if event.key == pygame.K_DOWN: self.menu_index = (self.menu_index + 1) % limit
+                    
+                    if event.key == pygame.K_x:
+                        if self.battle_menu_state != BATTLE_MAIN:
+                            self.battle_menu_state = BATTLE_MAIN; self.menu_index = 0
+                
+                # --- DIALOGUE INPUT ---
+                elif self.state == STATE_DIALOGUE:
+                    if self.key_pressed_enter:
+                        self.dialogue_index += 1
+                        if self.dialogue_index >= len(self.dialogue_queue):
+                            self.state = self.dialogue_next_state
+
+    def draw_button(self, text, x, y, index, active_color, inactive_color, font=None):
+        if font is None: font = self.font
+        is_selected = (self.menu_index == index)
+        color = active_color if is_selected else inactive_color
+        prefix = "> " if is_selected else "  "
+        surf = font.render(prefix + text, True, color)
+        rect = surf.get_rect(topleft=(x, y))
+        self.screen.blit(surf, rect)
+        mouse_pos = pygame.mouse.get_pos()
+        if rect.collidepoint(mouse_pos):
+            if self.menu_index != index: self.menu_index = index 
+            if self.mouse_click_pos is not None: return True 
+        if is_selected and self.key_pressed_enter: return True
+        return False
+
+    def draw_panel(self, x, y, width, height):
+        """Helper to draw a semi-transparent panel with white outline"""
+        s = pygame.Surface((width, height))
+        s.set_alpha(200) # Slightly transparent black
+        s.fill(BLACK)
+        self.screen.blit(s, (x, y))
         pygame.draw.rect(self.screen, WHITE, (x, y, width, height), 3)
+
+    def start_battle(self, level):
+        self.state = STATE_BATTLE
+        self.active_battle_level = level
+        self.enemy = generate_enemy(level)
         
+        self.current_battle_bg = self.battle_backgrounds.get(self.enemy.char_type, self.bg_battle_default)
+
+        self.floating_texts = []
+        self.is_battle_active = True
+        self.is_player_turn_ready = False
+        self.player.atb = 0
+        self.enemy.atb = 0
+        self.battle_menu_state = BATTLE_MAIN
+        self.menu_index = 0
+        self.enemy_blocked_zones = []
+        self.demon_barrier_active = False
+        zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
+        c_type = self.enemy.char_type
+        if c_type in ["Goblin", "Chimera"]: self.enemy_blocked_zones = [random.choice(zones)]
+        elif c_type in ["Orc", "Dark Knight", "Dragon"]:
+            open_spot = random.choice(zones)
+            self.enemy_blocked_zones = [z for z in zones if z != open_spot]
+        elif c_type in ["Demon", "Demon Lord"]: self.demon_barrier_active = True
+        self.mechanic_timer = self.mechanic_interval
+        
+        self.player.sprite = AnimatedSprite(self.anim_manager, self.WIDTH * 0.25, self.HEIGHT * 0.6)
+        self.player.sprite.set_animation("idle_down")
+        
+        enemy_img = self.enemy_images.get(c_type, self.enemy_images["Slime"])
+        self.enemy.sprite = StaticSprite(enemy_img, self.WIDTH * 0.75, self.HEIGHT * 0.55)
+
+    def end_player_turn(self):
+        self.player.atb = 0
+        self.is_player_turn_ready = False
+        self.battle_menu_state = BATTLE_MAIN
+        self.is_battle_active = True 
+
+    def execute_attack(self, zone):
+        self.is_battle_active = False 
+        if self.player.sprite: self.player.sprite.set_animation("attack_down", loop=False)
+        damage_mult = 1.0
+        popup_txt = ""; popup_col = WHITE
+        c_type = self.enemy.char_type
+        if c_type == "Slime": damage_mult = 1.2; popup_txt = "WEAK! "; popup_col = YELLOW
+        elif c_type in ["Skeleton", "Golem"]: damage_mult = 0.0; popup_txt = "IMMUNE"; popup_col = GRAY
+        elif c_type in ["Demon", "Demon Lord"]:
+            if self.demon_barrier_active: damage_mult = 0.0; popup_txt = "BARRIER"; popup_col = PURPLE
+            else: 
+                if c_type == "Demon Lord" and zone in self.enemy_blocked_zones: damage_mult = 0.2; popup_txt = "BLOCKED"; popup_col = GRAY
+                else: damage_mult = 1.0
+        elif c_type in ["Goblin", "Orc", "Chimera", "Dark Knight", "Dragon"]:
+            if zone in self.enemy_blocked_zones: damage_mult = 0.2; popup_txt = "BLOCKED"; popup_col = GRAY
+            else: damage_mult = 1.5; popup_txt = "WEAK! "; popup_col = YELLOW
+        raw_dmg = int(self.player.atk * damage_mult)
+        dmg = self.enemy.take_damage(raw_dmg)
+        if dmg > 0: popup_txt += str(dmg)
+        elif popup_txt == "": popup_txt = "0"
+        if self.enemy.sprite: self.spawn_popup(popup_txt, popup_col, self.enemy.sprite.x, self.enemy.sprite.y)
+        if damage_mult > 0 and dmg > 0: self.add_screen_shake(0.2, 5)
+        self.check_win()
+        self.end_player_turn()
+
+    def execute_skill(self, skill):
+        if self.player.mp < skill.cost:
+            if self.player.sprite: self.spawn_popup("NO MP!", BLUE, self.player.sprite.x, self.player.sprite.y)
+            return
+        self.is_battle_active = False
+        self.player.mp -= skill.cost
+        if self.player.sprite: self.player.sprite.set_animation("cast_down", loop=False)
+        if skill.type == "heal":
+            self.player.heal(skill.power)
+            if self.player.sprite: self.spawn_popup(f"+{skill.power} HP", GREEN, self.player.sprite.x, self.player.sprite.y)
+            self.check_win()
+            self.end_player_turn()
+            return
+        damage = int(self.player.atk * skill.power)
+        popup_txt = ""; popup_col = WHITE
+        c_type = self.enemy.char_type
+        if c_type in ["Skeleton", "Golem"] and skill.element == "magic":
+            damage = int(damage * 2.0); popup_txt = "CRIT! "; popup_col = YELLOW; self.add_screen_shake(0.5, 15)
+        if c_type in ["Demon", "Demon Lord"] and skill.element == "magic":
+            if self.demon_barrier_active:
+                self.demon_barrier_active = False; popup_txt = "SHATTERED! "; popup_col = RED; self.add_screen_shake(0.5, 15)
+        dmg = self.enemy.take_damage(damage)
+        popup_txt += str(dmg)
+        if self.enemy.sprite: self.spawn_popup(popup_txt, popup_col, self.enemy.sprite.x, self.enemy.sprite.y)
+        self.add_screen_shake(0.4, 10)
+        self.check_win()
+        self.end_player_turn()
+
+    def execute_potion(self):
+        if self.player.potions > 0:
+             self.player.potions -= 1
+             self.player.heal(50)
+             if self.player.sprite: self.spawn_popup("+50 HP", GREEN, self.player.sprite.x, self.player.sprite.y)
+             self.check_win()
+             self.end_player_turn()
+        else:
+             if self.player.sprite: self.spawn_popup("NO POTIONS", GRAY, self.player.sprite.x, self.player.sprite.y)
+
+    def execute_mana_potion(self):
+        if self.player.mana_potions > 0:
+             self.player.mana_potions -= 1
+             self.player.mp = min(self.player.max_mp, self.player.mp + 30)
+             if self.player.sprite: self.spawn_popup("+30 MP", BLUE, self.player.sprite.x, self.player.sprite.y)
+             self.check_win()
+             self.end_player_turn()
+        else:
+             if self.player.sprite: self.spawn_popup("NO MP POTIONS", GRAY, self.player.sprite.x, self.player.sprite.y)
+
+    def check_win(self):
+        if not self.enemy.is_alive:
+             self.is_battle_active = False 
+             # Enemy is static, no animation change needed
+             self.add_screen_shake(0.8, 25)
+             self.add_red_flash(255)
+             pygame.time.set_timer(pygame.USEREVENT + 2, 1500, 1) 
+
+    def trigger_victory_screen(self):
+        if self.active_battle_level == self.current_dungeon_depth:
+            if self.current_dungeon_depth < 10: self.current_dungeon_depth += 1
+        self.player.gold += self.enemy.gold_reward
+        leveled = self.player.gain_exp(self.enemy.exp_reward)
+        self.victory_data = {"gold": self.enemy.gold_reward, "exp": self.enemy.exp_reward, "leveled": leveled}
+        self.state = STATE_VICTORY
+        if self.player.sprite: self.player.sprite.set_animation("idle_down")
+
+    def draw_game_over(self):
+        self.screen.fill(BLACK)
+        title = self.title_font.render("GAME OVER", True, RED)
+        self.screen.blit(title, (self.WIDTH//2 - title.get_width()//2, self.HEIGHT * 0.3))
+        sub = self.font.render("You have fallen in battle...", True, WHITE)
+        self.screen.blit(sub, (self.WIDTH//2 - sub.get_width()//2, self.HEIGHT * 0.5))
+        if self.draw_button("Load Game", self.WIDTH//2 - 100, self.HEIGHT * 0.7, 0, YELLOW, GRAY, font=self.small_font):
+             self.is_saving = False; self.state = STATE_SAVE_MENU
+
+    def draw_stats_screen(self):
+        if self.bg_hub: self.screen.blit(self.bg_hub, (0,0))
+        overlay = pygame.Surface((self.WIDTH, self.HEIGHT))
+        overlay.fill(BLACK); overlay.set_alpha(200)
+        self.screen.blit(overlay, (0,0))
+        title = self.title_font.render("HERO STATISTICS", True, WHITE)
+        self.screen.blit(title, (self.WIDTH//2 - title.get_width()//2, 100))
+        p = self.player
+        stats = [
+            f"Name: {p.name}", f"Level: {p.level}", f"EXP: {p.exp} / {p.exp_to_next}", 
+            f"HP: {p.hp} / {p.max_hp}", f"MP: {p.mp} / {p.max_mp}", f"Attack: {p.atk}", 
+            f"Defense: {p.defense}", f"Speed: {p.speed}", f"Gold: {p.gold}", 
+            f"HP Potions: {p.potions}", f"MP Potions: {p.mana_potions}"
+        ]
+        start_y = 250
+        for i, s in enumerate(stats):
+            txt = self.font.render(s, True, YELLOW if i % 2 == 0 else WHITE)
+            self.screen.blit(txt, (self.WIDTH//2 - 200, start_y + i * 50))
+        if self.draw_button("Return", self.WIDTH//2 - 50, self.HEIGHT - 100, 0, GRAY, WHITE, font=self.small_font): self.state = STATE_HUB
+
+    def wrap_text(self, text, font, max_width):
+        """Helper to wrap text into multiple lines"""
         words = text.split(' ')
         lines = []
         current_line = []
         
         for word in words:
             test_line = ' '.join(current_line + [word])
-            if self.small_font.size(test_line)[0] < width - 20:
+            w, h = font.size(test_line)
+            if w < max_width:
                 current_line.append(word)
             else:
-                if current_line:
-                    lines.append(' '.join(current_line))
+                lines.append(' '.join(current_line))
                 current_line = [word]
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        for i, line in enumerate(lines[:4]):
-            text_surf = self.small_font.render(line, True, WHITE)
-            self.screen.blit(text_surf, (x + 10, y + 10 + i * 35))
-    
-    def draw_visual_novel(self):
-        # Draw background
-        if self.vn_background:
-            self.screen.blit(self.vn_background, (0, 0))
+        lines.append(' '.join(current_line))
+        return lines
+
+    def draw_dialogue(self):
+        # 1. Background (Specific or Hub + Overlay)
+        if self.current_dialogue_bg:
+            self.screen.blit(self.current_dialogue_bg, (0,0))
         else:
-            self.screen.fill((40, 30, 60))  # Fallback color
-        
-        scene = self.scenes[self.current_scene_key]
-        scene.update()
-        
-        # Create dialogue box rect and position at midbottom
-        dialogue_rect = pygame.Rect(0, 0, 700, 150)
-        dialogue_rect.midbottom = (self.screen_width // 2, self.screen_height - 10)
-        
-        # Create name box rect and position above dialogue box
-        name_rect = pygame.Rect(0, 0, 200, 40)
-        name_rect.bottomleft = (dialogue_rect.left, dialogue_rect.top - 10)
-        
-        # Draw character name box
-        pygame.draw.rect(self.screen, BLUE, name_rect)
-        name_text = self.font.render(scene.character_name, True, WHITE)
-        name_text_rect = name_text.get_rect(center=name_rect.center)
-        self.screen.blit(name_text, name_text_rect)
-        
-        # Draw dialogue box
-        self.draw_text_box(scene.get_displayed_text(), dialogue_rect.x, dialogue_rect.y, dialogue_rect.width, dialogue_rect.height)
-        
-        # Draw choices if available and text is fully shown
-        if scene.choices and scene.full_text_shown:
-            choice_width = 400
-            choice_height = 50
-            choice_spacing = 10
-            start_y = self.screen_height // 3
+            self.screen.fill(BLACK)
+
+        overlay = pygame.Surface((self.WIDTH, self.HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0,0))
+
+        if self.dialogue_index < len(self.dialogue_queue):
+            data = self.dialogue_queue[self.dialogue_index]
             
-            for i, (choice_text, _) in enumerate(scene.choices):
-                choice_rect = pygame.Rect(0, 0, choice_width, choice_height)
-                choice_rect.midtop = (self.screen_width // 2, start_y + i * (choice_height + choice_spacing))
-                
-                color = YELLOW if i == self.battle_menu_index else WHITE
-                pygame.draw.rect(self.screen, GRAY, choice_rect)
-                pygame.draw.rect(self.screen, color, choice_rect, 3)
-                
-                choice_surf = self.small_font.render(choice_text, True, color)
-                choice_text_rect = choice_surf.get_rect(center=choice_rect.center)
-                self.screen.blit(choice_surf, choice_text_rect)
-        
-        # Draw continue prompt
-        if scene.full_text_shown and not scene.choices:
-            prompt = self.small_font.render("Press SPACE to continue", True, YELLOW)
-            prompt_rect = prompt.get_rect(bottomright=(self.screen_width - 20, self.screen_height - 20))
-            self.screen.blit(prompt, prompt_rect)
-    
+            # 2. Draw Portrait
+            sprite_key = data.get("sprite", "Hero")
+            if sprite_key in self.portraits:
+                img = self.portraits[sprite_key]
+                self.screen.blit(img, (self.WIDTH//2 - img.get_width()//2, self.HEIGHT - 300 - img.get_height()))
+            elif sprite_key in self.enemy_images:
+                img = self.enemy_images[sprite_key]
+                img = pygame.transform.scale(img, (200, 200))
+                self.screen.blit(img, (self.WIDTH//2 - 100, self.HEIGHT - 500))
+
+            # 3. Draw Text Box
+            box_h = 250
+            pygame.draw.rect(self.screen, BLACK, (0, self.HEIGHT - box_h, self.WIDTH, box_h))
+            pygame.draw.rect(self.screen, WHITE, (0, self.HEIGHT - box_h, self.WIDTH, box_h), 4)
+
+            # 4. Draw Name
+            name_txt = self.font.render(data["name"], True, YELLOW)
+            self.screen.blit(name_txt, (50, self.HEIGHT - box_h + 30))
+
+            # 5. Draw Text (Wrapped)
+            lines = self.wrap_text(data["text"], self.small_font, self.WIDTH - 100)
+            for i, line in enumerate(lines):
+                txt_surf = self.small_font.render(line, True, WHITE)
+                self.screen.blit(txt_surf, (50, self.HEIGHT - box_h + 80 + (i * 35)))
+
+            # 6. Continue Prompt
+            cont_txt = self.small_font.render("Press Z to continue...", True, CYAN)
+            self.screen.blit(cont_txt, (self.WIDTH - 300, self.HEIGHT - 50))
+
+    def draw_battle_hint(self):
+        if not self.enemy or not self.enemy.is_alive: return
+        hint = ""; color = WHITE
+        c_type = self.enemy.char_type
+        if c_type == "Slime": hint = "The Slime wobbles... Vulnerable everywhere."; color = CYAN
+        elif c_type == "Goblin": blocked = self.enemy_blocked_zones[0]; hint = f"Goblin blocks {blocked.upper()}!"; color = YELLOW
+        elif c_type in ["Orc", "Dark Knight", "Dragon"]:
+            all_zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
+            open_zone = [z for z in all_zones if z not in self.enemy_blocked_zones][0]
+            if open_zone.upper() == "HIGH":
+                hint = f"Heavy Guard! HEAD exposed!"; color = ORANGE
+            if open_zone.upper() == "MID":
+                hint = f"Heavy Guard! TORSO exposed!"; color = ORANGE
+            if open_zone.upper() == "LOW":
+                hint = f"Heavy Guard! LEGS exposed!"; color = ORANGE
+        elif c_type == "Chimera": blocked = self.enemy_blocked_zones[0]; hint = f"The Chimera guards {blocked.upper()} with its tail!"; color = ORANGE
+        elif c_type in ["Skeleton", "Golem"]: hint = "Armor is too thick...."; color = GRAY
+        elif c_type in ["Demon", "Demon Lord"]:
+            if self.demon_barrier_active: hint = "Dark Shield Active!"; color = PURPLE
+            else: 
+                if c_type == "Demon Lord":
+                    all_zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
+                    open_zone = [z for z in all_zones if z not in self.enemy_blocked_zones][0]
+                    if open_zone.upper() == "HIGH":
+                        hint = f"Barrier Down! He guards fast! His HEAD is exposed!"; color = RED
+                    if open_zone.upper() == "MID":
+                        hint = f"Barrier Down! He guards fast! His TORSO is exposed!"; color = RED
+                    if open_zone.upper() == "LOW":
+                        hint = f"Barrier Down! He guards fast! His LEGS are exposed!"; color = RED
+                else: hint = "Shield Shattered! Attack now!"; color = RED
+        if hint:
+            lbl = self.font.render(hint, True, color)
+            bg_rect = lbl.get_rect(center=(self.WIDTH//2, 80))
+            pygame.draw.rect(self.screen, BLACK, bg_rect.inflate(30, 10))
+            pygame.draw.rect(self.screen, WHITE, bg_rect.inflate(30, 10), 2)
+            self.screen.blit(lbl, bg_rect)
+
     def draw_battle(self):
-        # Get screen shake offset
-        shake_x, shake_y = self.get_screen_shake_offset()
+        if self.current_battle_bg:
+            ox = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity) if self.screen_shake_duration > 0 else 0
+            oy = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity) if self.screen_shake_duration > 0 else 0
+            self.screen.blit(self.current_battle_bg, (ox, oy))
+        else: 
+            self.screen.fill((40, 20, 20))
+
+        self.draw_battle_hint()
+        p_rect = None; e_rect = None
+        if self.player.sprite: p_rect = self.player.sprite.draw(self.screen)
+        if self.enemy.sprite: e_rect = self.enemy.sprite.draw(self.screen)
         
-        # Create a temporary surface for shaking
-        temp_surface = pygame.Surface((self.screen_width, self.screen_height))
+        if p_rect and self.player.is_alive: 
+            self.draw_hp_bar(self.screen, p_rect, self.player.hp, self.player.max_hp, GREEN)
+            self.draw_atb_bar(self.screen, p_rect, self.player.atb, ATB_MAX)
         
-        # Draw background
-        if self.battle_background:
-            temp_surface.blit(self.battle_background, (0, 0))
-        else:
-            temp_surface.fill((60, 40, 40))  # Fallback color
+        if e_rect and self.enemy.is_alive: 
+            self.draw_hp_bar(self.screen, e_rect, self.enemy.hp, self.enemy.max_hp, RED)
+            # Draw Enemy Name
+            name_surf = self.small_font.render(self.enemy.name, True, WHITE)
+            outline_surf = self.small_font.render(self.enemy.name, True, BLACK)
+            name_rect = name_surf.get_rect(midtop=(e_rect.centerx, e_rect.bottom - 40))
+            self.screen.blit(outline_surf, (name_rect.x + 2, name_rect.y + 2))
+            self.screen.blit(name_surf, name_rect)
         
-        # Update and draw sprites
-        dt = self.clock.get_time() / 1000.0
-        self.update_screen_effects(dt)
+        for txt in self.floating_texts: txt.draw(self.screen)
+
+        ui_y = self.HEIGHT - 250
+        pygame.draw.rect(self.screen, BLACK, (0, ui_y, self.WIDTH, 250))
+        pygame.draw.rect(self.screen, WHITE, (0, ui_y, self.WIDTH, 250), 3)
+        self.screen.blit(self.font.render(f"{self.player.name} (Lv.{self.player.level})", True, WHITE), (50, ui_y + 30))
+        self.screen.blit(self.font.render(f"MP: {self.player.mp}/{self.player.max_mp}", True, BLUE), (50, ui_y + 80))
+        self.screen.blit(self.font.render(f"Potions: {self.player.potions}", True, YELLOW), (50, ui_y + 130))
+        self.screen.blit(self.font.render(f"Mana Pots: {self.player.mana_potions}", True, CYAN), (50, ui_y + 165))
         
-        if self.player.sprite:
-            self.player.sprite.update(dt)
-            self.player.sprite.draw(temp_surface)
+        menu_x = self.WIDTH // 2 - 100
+        
+        # Only draw menu if player turn is ready
+        if self.is_player_turn_ready and self.is_battle_active:
+            if self.battle_menu_state == BATTLE_MAIN:
+                opts = ["Attack", "Skills", "Items", "Flee"]
+                for i, o in enumerate(opts):
+                    # We check return value. If True, action taken.
+                    if self.draw_button(o, menu_x, ui_y + 30 + i*50, i, YELLOW, GRAY):
+                        if i == 0: 
+                            self.battle_menu_state = BATTLE_ATTACK_SELECT
+                            self.menu_index = 1
+                        elif i == 1: 
+                            self.battle_menu_state = BATTLE_SKILLS
+                            self.menu_index = 0
+                        elif i == 2: 
+                            self.battle_menu_state = BATTLE_ITEM_SELECT
+                            self.menu_index = 0
+                        elif i == 3: 
+                            self.state = STATE_HUB
+                        # CRITICAL FIX: Break loop so we don't process other buttons with the new index
+                        break 
+
+            elif self.battle_menu_state == BATTLE_ATTACK_SELECT:
+                self.screen.blit(self.small_font.render("SELECT ZONE (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
+                opts = ["High Strike", "Mid Strike", "Low Strike"]
+                zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
+                for i, o in enumerate(opts):
+                    if self.draw_button(o, menu_x, ui_y + 40 + i*50, i, ORANGE, GRAY):
+                        self.execute_attack(zones[i])
+                        break # Break loop
+
+            elif self.battle_menu_state == BATTLE_SKILLS:
+                self.screen.blit(self.small_font.render("SELECT SKILL (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
+                for i, sk in enumerate(self.player.skills):
+                    color = YELLOW
+                    if self.player.mp < sk.cost: color = DARK_GRAY
+                    if self.draw_button(f"{sk.name} ({sk.cost} MP)", menu_x, ui_y + 40 + i*50, i, color, GRAY):
+                        self.execute_skill(sk)
+                        break # Break loop
             
-            # Check if attack animation finished
-            if self.battle_animation_playing and self.player.sprite.animation_finished:
-                self.battle_animation_playing = False
-                self.player.sprite.set_animation('idle_down')
-        
-        if self.enemy and self.enemy.sprite:
-            self.enemy.sprite.update(dt)
-            self.enemy.sprite.draw(temp_surface)
-        
-        # Create stat boxes with anchor positioning
-        player_stats_rect = pygame.Rect(0, 0, 200, 120)
-        player_stats_rect.bottomleft = (100, self.screen_height - 180)
-        
-        enemy_stats_rect = pygame.Rect(0, 0, 200, 120)
-        enemy_stats_rect.bottomright = (self.screen_width - 100, self.screen_height - 180)
-        
-        # Draw player stats
-        self.draw_character_stats_on_surface(temp_surface, self.player, player_stats_rect.x, player_stats_rect.y, True)
-        
-        # Draw enemy stats
-        self.draw_character_stats_on_surface(temp_surface, self.enemy, enemy_stats_rect.x, enemy_stats_rect.y, False)
-        
-        # Draw battle menu (bottom left)
-        if self.battle_phase == "player_turn" and not self.battle_animation_playing:
-            menu_options = ["Attack", "Magic", "Heal"]
-            menu_width = 200
-            menu_height = 40
-            menu_spacing = 5
-            
-            for i, option in enumerate(menu_options):
-                menu_rect = pygame.Rect(0, 0, menu_width, menu_height)
-                menu_rect.bottomleft = (100, self.screen_height - 20 - (len(menu_options) - 1 - i) * (menu_height + menu_spacing))
+            elif self.battle_menu_state == BATTLE_ITEM_SELECT:
+                self.screen.blit(self.small_font.render("SELECT ITEM (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
                 
-                color = YELLOW if i == self.battle_menu_index else WHITE
-                pygame.draw.rect(temp_surface, GRAY, menu_rect)
-                pygame.draw.rect(temp_surface, color, menu_rect, 3)
+                # Health Potion Button
+                hp_txt = f"Health Potion ({self.player.potions})"
+                if self.draw_button(hp_txt, menu_x, ui_y + 40, 0, GREEN, GRAY):
+                    self.execute_potion()
                 
-                text = self.small_font.render(option, True, color)
-                text_rect = text.get_rect(center=menu_rect.center)
-                temp_surface.blit(text, text_rect)
-        
-        # Draw battle log (center bottom)
-        log_width = 500
-        log_height = 150
-        log_rect = pygame.Rect(0, 0, log_width, log_height)
-        log_rect.midbottom = (self.screen_width // 2, self.screen_height - 20)
-        
-        pygame.draw.rect(temp_surface, BLACK, log_rect)
-        pygame.draw.rect(temp_surface, WHITE, log_rect, 2)
-        
-        for i, log in enumerate(self.battle_log[-5:]):
-            log_text = self.small_font.render(log, True, WHITE)
-            temp_surface.blit(log_text, (log_rect.x + 10, log_rect.y + 10 + i * 28))
-        
-        # Blit temp surface to screen with shake offset
-        self.screen.blit(temp_surface, (shake_x, shake_y))
-        
-        # Draw red flash overlay
+                # Mana Potion Button
+                mp_txt = f"Mana Potion ({self.player.mana_potions})"
+                if self.draw_button(mp_txt, menu_x, ui_y + 90, 1, BLUE, GRAY):
+                    self.execute_mana_potion()
+
         if self.red_flash_alpha > 0:
-            flash_surface = pygame.Surface((self.screen_width, self.screen_height))
-            flash_surface.set_alpha(int(self.red_flash_alpha))
-            flash_surface.fill(RED)
-            self.screen.blit(flash_surface, (0, 0))
-    
-    def draw_character_stats_on_surface(self, surface, char, x, y, is_player):
-        # Character box
-        color = GREEN if is_player else RED
-        pygame.draw.rect(surface, color, (x, y, 200, 120), 3)
-        
-        # Name
-        name_text = self.font.render(char.name, True, WHITE)
-        surface.blit(name_text, (x + 10, y + 10))
-        
-        # HP bar
-        hp_ratio = char.hp / char.max_hp
-        pygame.draw.rect(surface, GRAY, (x + 10, y + 50, 180, 20))
-        pygame.draw.rect(surface, GREEN, (x + 10, y + 50, int(180 * hp_ratio), 20))
-        hp_text = self.small_font.render(f"HP: {char.hp}/{char.max_hp}", True, WHITE)
-        surface.blit(hp_text, (x + 10, y + 80))
-    
-    def handle_visual_novel_input(self, event):
-        scene = self.scenes[self.current_scene_key]
-        
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                if not scene.full_text_shown:
-                    scene.skip_text()
-                elif scene.choices:
-                    pass
-                elif scene.next_scene:
-                    if scene.next_scene == "enter_battle":
-                        self.start_battle()
-                    else:
-                        self.current_scene_key = scene.next_scene
-                        self.scenes[self.current_scene_key].current_char = 0
-                        self.scenes[self.current_scene_key].full_text_shown = False
-            
-            elif scene.choices and scene.full_text_shown:
-                if event.key == pygame.K_UP:
-                    self.battle_menu_index = (self.battle_menu_index - 1) % len(scene.choices)
-                elif event.key == pygame.K_DOWN:
-                    self.battle_menu_index = (self.battle_menu_index + 1) % len(scene.choices)
-                elif event.key == pygame.K_z:
-                    _, next_scene = scene.choices[self.battle_menu_index]
-                    self.current_scene_key = next_scene
-                    self.scenes[self.current_scene_key].current_char = 0
-                    self.scenes[self.current_scene_key].full_text_shown = False
-                    self.battle_menu_index = 0
-    
-    def handle_battle_input(self, event):
-        if event.type == pygame.KEYDOWN and self.battle_phase == "player_turn" and not self.battle_animation_playing:
-            if event.key == pygame.K_UP:
-                self.battle_menu_index = (self.battle_menu_index - 1) % 3
-            elif event.key == pygame.K_DOWN:
-                self.battle_menu_index = (self.battle_menu_index + 1) % 3
-            elif event.key == pygame.K_RETURN:
-                self.execute_battle_action()
-    
-    def execute_battle_action(self):
-        # CHANGE 1: Immediately switch phase to 'wait' or 'enemy_turn' to lock input
-        self.battle_phase = "wait" 
-        
-        self.battle_animation_playing = True
-        
-        if self.battle_menu_index == 0:  # Attack
-            # ... (rest of the logic remains the same)
-            self.player.sprite.set_animation('attack_down', loop=False)
-            damage = self.enemy.take_damage(self.player.atk)
-            self.battle_log.append(f"{self.player.name} attacks for {damage} damage!")
-            self.add_screen_shake(0.3, 8)
-            self.add_red_flash(100)
-        elif self.battle_menu_index == 1:  # Magic
-            # ... (rest of the logic remains the same)
-            self.player.sprite.set_animation('cast_down', loop=False)
-            damage = self.enemy.take_damage(self.player.atk + 10)
-            self.battle_log.append(f"{self.player.name} casts magic for {damage} damage!")
-            self.add_screen_shake(0.4, 12)
-            self.add_red_flash(150)
-        elif self.battle_menu_index == 2:  # Heal
-            # ... (rest of the logic remains the same)
-            self.player.sprite.set_animation('cast_down', loop=False)
-            heal_amount = 20
-            self.player.heal(heal_amount)
-            self.battle_log.append(f"{self.player.name} heals for {heal_amount} HP!")
-        
-        if not self.enemy.is_alive:
-            self.battle_log.append(f"{self.enemy.name} defeated!")
-            pygame.time.set_timer(pygame.USEREVENT + 2, 1500, 1)
-            return
-        
-        pygame.time.set_timer(pygame.USEREVENT + 1, 1500, 1)
-    
-    def enemy_turn(self):
-        self.battle_phase = "enemy_turn"
-        if self.enemy.sprite:
-            self.enemy.sprite.set_animation('attack_down', loop=False)
-        
-        damage = self.player.take_damage(self.enemy.atk)
-        self.battle_log.append(f"{self.enemy.name} attacks for {damage} damage!")
-        
-        # Add screen shake and red flash for enemy attack
-        self.add_screen_shake(0.3, 8)
-        self.add_red_flash(100)
-        
-        if not self.player.is_alive:
-            self.battle_log.append("You have been defeated!")
-            pygame.time.set_timer(pygame.USEREVENT + 2, 1500, 1)
-            return
-        
-        self.battle_phase = "player_turn"
-    
-    def end_battle(self, victory):
-        pygame.time.set_timer(pygame.USEREVENT + 1, 0)
-        pygame.time.set_timer(pygame.USEREVENT + 2, 0)
-        if victory:
-            self.current_scene_key = "victory"
-        else:
-            self.current_scene_key = "defeat"
-        self.scenes[self.current_scene_key].current_char = 0
-        self.scenes[self.current_scene_key].full_text_shown = False
-        self.state = STATE_VISUAL_NOVEL
-        self.player.is_alive = True
-    
+            flash = pygame.Surface((self.WIDTH, self.HEIGHT))
+            flash.fill(RED); flash.set_alpha(int(self.red_flash_alpha))
+            self.screen.blit(flash, (0,0))
+
     def run(self):
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.USEREVENT + 1:
-                    self.enemy_turn()
-                elif event.type == pygame.USEREVENT + 2:
-                    victory = not self.player.is_alive == False
-                    self.end_battle(victory)
-                elif self.state == STATE_VISUAL_NOVEL:
-                    self.handle_visual_novel_input(event)
-                elif self.state == STATE_BATTLE:
-                    self.handle_battle_input(event)
+        while True:
+            dt = self.clock.tick(FPS) / 1000.0
+            if self.screen_shake_duration > 0: self.screen_shake_duration -= dt
+            if self.red_flash_alpha > 0: self.red_flash_alpha -= dt * 300
             
-            if self.state == STATE_VISUAL_NOVEL:
-                self.draw_visual_novel()
-            elif self.state == STATE_BATTLE:
-                self.draw_battle()
+            if self.state == STATE_BATTLE:
+                self.update_atb(dt)
+                self.update_battle_mechanics(dt)
+                if self.player.sprite: 
+                    self.player.sprite.update(dt)
+                    if self.player.sprite.animation_finished and self.player.sprite.current_animation in ["attack_down", "cast_down"]:
+                        self.player.sprite.set_animation("idle_down")
+                if self.enemy.sprite: 
+                    self.enemy.sprite.update(dt)
+                if not self.player.is_alive and self.player.sprite and self.player.sprite.animation_finished:
+                     pygame.time.delay(1000)
+                     self.state = STATE_GAME_OVER
             
+            self.handle_input()
+            
+            if self.state == STATE_START:
+                if self.bg_start: self.screen.blit(self.bg_start, (0,0))
+                else: self.screen.fill(BLACK)
+                
+                # --- DRAW BOX BEHIND TITLE ---
+                t = self.title_font.render("HERO'S JOURNEY", True, YELLOW)
+                t_rect = t.get_rect(center=(self.WIDTH//2, self.HEIGHT * 0.2))
+                # Make panel slightly wider than text
+                panel_w = t_rect.width + 100
+                panel_h = t_rect.height + 40
+                self.draw_panel(t_rect.centerx - panel_w//2, t_rect.centery - panel_h//2, panel_w, panel_h)
+                self.screen.blit(t, t_rect)
+
+                # --- DRAW BOX BEHIND MENU OPTIONS ---
+                menu_h = 200; menu_w = 400
+                menu_x = self.WIDTH//2 - menu_w//2; menu_y = self.HEIGHT * 0.5 - 20
+                self.draw_panel(menu_x, menu_y, menu_w, menu_h)
+
+                opts = ["New Game", "Load Game", "Quit"]
+                for i, o in enumerate(opts):
+                    if self.draw_button(o, self.WIDTH//2 - 100, self.HEIGHT * 0.5 + i*60, i, YELLOW, GRAY):
+                        if i == 0: self.reset_game()
+                        elif i == 1: self.is_saving = False; self.state = STATE_SAVE_MENU
+                        elif i == 2: pygame.quit(); sys.exit()
+
+            elif self.state == STATE_HUB:
+                if self.bg_hub: self.screen.blit(self.bg_hub, (0,0))
+                else: self.screen.fill((30, 30, 40))
+                
+                # --- DRAW TITLE WITH PANEL ---
+                t = self.title_font.render("Village", True, WHITE)
+                self.draw_panel(80, 80, t.get_width() + 40, t.get_height() + 20)
+                self.screen.blit(t, (100, 100))
+                
+                # --- DRAW BOX BEHIND HUB OPTIONS ---
+                self.draw_panel(80, 280, 400, 380)
+
+                ops = ["Enter Dungeon", "Shop", "Heal (10g)", "Stats", "Save", "Quit"]
+                for i, o in enumerate(ops):
+                    if self.draw_button(o, 100, 300 + i*60, i, CYAN, GRAY):
+                        if i == 0: self.menu_index = 0; self.state = STATE_DUNG_SELECT
+                        elif i == 1: self.state = STATE_SHOP
+                        elif i == 2: 
+                             if self.player.gold >= 10: self.player.gold -= 10; self.player.heal(999); self.player.mp = self.player.max_mp
+                        elif i == 3: self.state = STATE_STATS
+                        elif i == 4: self.is_saving = True; self.state = STATE_SAVE_MENU
+                        elif i == 5: self.state = STATE_START
+                stats = f"HP:{self.player.hp} | Gold:{self.player.gold}"
+                self.screen.blit(self.small_font.render(stats, True, YELLOW), (20, 20))
+
+            elif self.state == STATE_STATS: self.draw_stats_screen()
+            
+            elif self.state == STATE_DUNG_SELECT:
+                self.screen.fill(BLACK)
+                self.screen.blit(self.title_font.render("Select Demon Castle Floor", True, RED), (100, 100))
+                for i in range(10):
+                    level_num = i + 1
+                    is_locked = level_num > self.current_dungeon_depth
+                    txt = f"Level {level_num} [LOCKED]" if is_locked else f"Level {level_num}"
+                    color = DARK_GRAY if is_locked else (RED if self.menu_index == i else GRAY)
+                    x = 100 if i < 5 else 600
+                    y = 300 + (i % 5) * 60
+                    if self.draw_button(txt, x, y, i, RED, color):
+                         if not is_locked: self.start_battle(level_num)
+                back_txt = self.small_font.render("Press X to return to Village", True, WHITE)
+                self.screen.blit(back_txt, (50, self.HEIGHT - 50))
+
+            elif self.state == STATE_SHOP:
+                if self.bg_shop: self.screen.blit(self.bg_shop, (0,0))
+                else: self.screen.fill((50, 40, 20))
+                
+                # --- DRAW TITLE WITH PANEL ---
+                t = self.title_font.render("SHOP", True, YELLOW)
+                self.draw_panel(80, 30, t.get_width() + 40, t.get_height() + 20)
+                self.screen.blit(t, (100, 50))
+                
+                # --- DRAW BOX BEHIND SHOP OPTIONS ---
+                self.draw_panel(80, 280, 600, 260)
+
+                ops = [
+                    f"Health Potion (50g) [{self.player.potions}]", 
+                    f"Mana Potion (50g) [{self.player.mana_potions}]", 
+                    f"Upgrade Sword (200g) [{self.player.atk}]"
+                ]
+                for i, o in enumerate(ops):
+                    if self.draw_button(o, 100, 300 + i*80, i, GREEN, GRAY):
+                        # Health Pot
+                        if i == 0 and self.player.gold >= 50: self.player.gold -= 50; self.player.potions += 1
+                        # Mana Pot
+                        elif i == 1 and self.player.gold >= 50: self.player.gold -= 50; self.player.mana_potions += 1
+                        # Upgrade Sword
+                        elif i == 2 and self.player.gold >= 200: self.player.gold -= 200; self.player.atk += 5
+
+            elif self.state == STATE_SAVE_MENU:
+                self.screen.fill((20, 20, 50))
+                title_txt = "SAVE GAME" if self.is_saving else "LOAD GAME"
+                self.screen.blit(self.title_font.render(title_txt, True, WHITE), (100, 50))
+                for i in range(3):
+                    if self.draw_button(f"Slot {i+1}", 100, 300 + i*80, i, PURPLE, GRAY):
+                        if self.is_saving: self.save_game(i); self.state = STATE_HUB
+                        else: 
+                            if self.load_game(i): self.state = STATE_HUB
+
+            # <--- STATE HANDLER FOR THE INTRO SEQUENCE
+            elif self.state == STATE_INTRO_PART_2:
+                # Goddess dialogue finished, now start King dialogue
+                self.start_dialogue("intro_king", STATE_HUB)
+
+            # <--- STATE HANDLER FOR ENDING SEQUENCE
+            elif self.state == STATE_ENDING_PART_2:
+                # Final "Everyone is happy" dialogue finished, now start Hero Monologue
+                # When Hero Monologue ends, go to STATE_START (Title Screen)
+                self.start_dialogue("ending_monologue", STATE_START)
+
+            elif self.state == STATE_DIALOGUE: self.draw_dialogue()
+            elif self.state == STATE_BATTLE: self.draw_battle()
+            elif self.state == STATE_VICTORY: self.draw_victory_screen()
+            elif self.state == STATE_GAME_OVER: self.draw_game_over()
             pygame.display.flip()
-            self.clock.tick(FPS)
-        
-        pygame.quit()
-        sys.exit()
 
 if __name__ == "__main__":
     game = Game()
