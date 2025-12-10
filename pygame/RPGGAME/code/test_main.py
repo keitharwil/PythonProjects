@@ -48,6 +48,9 @@ STATE_BATTLE = "battle"
 STATE_VICTORY = "victory"
 STATE_GAME_OVER = "game_over"
 STATE_SAVE_MENU = "save_menu"
+STATE_DIALOGUE = "dialogue"
+STATE_INTRO_PART_2 = "intro_part_2" 
+STATE_ENDING_PART_2 = "ending_part_2" # <--- NEW STATE FOR FINAL SCENE
 
 BATTLE_MAIN = "main_menu"
 BATTLE_ATTACK_SELECT = "attack_select"
@@ -281,11 +284,10 @@ class Game:
         # Load Main Backgrounds
         self.bg_start = self.load_background("bg_start.png")
         self.bg_hub = self.load_background("bg_hub.png")
-        self.bg_battle_default = self.load_background("bg_battle.png") # The default fallback
+        self.bg_battle_default = self.load_background("bg_battle.png") 
         self.bg_shop = self.load_background("bg_shop.png")
 
-        # --- LOAD BATTLE BACKGROUNDS PER ENEMY ---
-        # 1. Configuration: Map Enemy Name to Filename
+        # --- BATTLE BACKGROUNDS CONFIG ---
         self.battle_bg_config = {
             "Slime": "bg_forest.png",
             "Goblin": "bg_forest.png",
@@ -298,15 +300,34 @@ class Game:
             "Dragon": "bg_dragon_lair.png",
             "Demon Lord": "bg_demon_lord.png"
         }
-        
-        # 2. Load them into memory
+
         self.battle_backgrounds = {}
         self.load_all_battle_backgrounds()
+        self.current_battle_bg = self.bg_battle_default 
 
-        self.current_battle_bg = self.bg_battle_default # Variable for the current active BG
+        # --- DIALOGUE BACKGROUND CONFIG ---
+        self.dialogue_bg_map = {
+            "intro_goddess": "bg_intro.png", 
+            "intro_king": "bg_throne_room.png",      
+            "level_1_clear": "bg_slime_cave.png",
+            "level_2_clear": "bg_goblin_camp.png",
+            "level_3_clear": "bg_crypt.png",
+            "level_4_clear": "bg_orc_pit.png",
+            "level_5_clear": "bg_demon_hall.png",
+            "level_6_clear": "bg_golem_ruins.png",
+            "level_7_clear": "bg_chimera_nest.png",
+            "level_8_clear": "bg_dark_castle.png",
+            "level_9_clear": "bg_dragon_lair.png",
+            "level_10_clear": "bg_final_victory.png",
+            "ending_monologue": "bg_final_victory.png" # <--- BACKGROUND FOR FINAL SCENE
+        }
+        self.current_dialogue_bg = None
 
         # Load Enemy Images (Static)
         self.enemy_images = self.load_enemy_images()
+
+        # --- LOAD STORY PORTRAITS ---
+        self.portraits = self.load_portrait_images()
 
         self.state = STATE_START
         self.player = Character("Hero", 100, 50, 20, 5, is_player=True)
@@ -333,6 +354,11 @@ class Game:
         self.mouse_click_pos = None
         self.key_pressed_enter = False
 
+        # --- DIALOGUE SYSTEM VARIABLES ---
+        self.dialogue_queue = [] 
+        self.dialogue_index = 0
+        self.dialogue_next_state = STATE_HUB
+
     def load_background(self, filename):
         try:
             path = Path(join("assets", filename))
@@ -344,30 +370,19 @@ class Game:
         return None
 
     def load_all_battle_backgrounds(self):
-        """Loads specific backgrounds per enemy based on config"""
-        print("--- LOADING BATTLE BACKGROUNDS ---")
         for enemy_type, filename in self.battle_bg_config.items():
             bg = self.load_background(filename)
-            if bg:
-                self.battle_backgrounds[enemy_type] = bg
-                print(f"Loaded BG for {enemy_type}: {filename}")
-            else:
-                print(f"BG missing for {enemy_type} ({filename}), using default.")
+            if bg: self.battle_backgrounds[enemy_type] = bg
 
     def load_enemy_images(self):
         """Loads static enemy images or creates fallbacks"""
-        print("--- LOADING ENEMY ASSETS ---")
         names = ["Slime", "Goblin", "Skeleton", "Orc", "Demon", "Golem", "Chimera", "Dark Knight", "Dragon", "Demon Lord"]
         images = {}
-        
-        if not os.path.exists("assets"):                                                                                        
-            print("WARNING: 'assets' folder not found. Creating fallbacks.")
-
+        if not os.path.exists("assets"): print("WARNING: 'assets' folder not found. Creating fallbacks.")
         for name in names:
             filename = f"{name}.png"
             path = Path(join("assets", filename))
             loaded = False
-            
             try:
                 if path.exists():
                     img = pygame.image.load(path).convert_alpha()
@@ -375,12 +390,7 @@ class Game:
                     w, h = img.get_width() * scale, img.get_height() * scale
                     images[name] = pygame.transform.scale(img, (w, h))
                     loaded = True
-                    print(f"Loaded: {filename}")
-                else:
-                    print(f"Missing: {filename} (Using Fallback)")
-            except Exception as e:
-                print(f"Error loading {filename}: {e}")
-
+            except: pass
             if not loaded:
                 surf = pygame.Surface((150, 150))
                 random.seed(name) 
@@ -390,13 +400,150 @@ class Game:
                 txt = self.small_font.render(name, True, WHITE)
                 surf.blit(txt, (75 - txt.get_width()//2, 75 - txt.get_height()//2))
                 images[name] = surf
-                
         return images
-    
+
+    def load_portrait_images(self):
+        """Loads larger portraits for dialogue"""
+        print("--- LOADING STORY PORTRAITS ---")
+        portraits = {}
+        config = {
+            "Hero": "portrait_hero.png",
+            "Hero_Final": "portrait_hero.png",
+            "King": "portrait_king.png",
+            "Goddess": "portrait_goddess.png"
+        }
+        
+        for char_name, filename in config.items():
+            loaded = False
+            try:
+                path = Path(join("assets", filename))
+                if path.exists():
+                    img = pygame.image.load(path).convert_alpha()
+                    # Scale factor logic (Adjust 300 to change height)
+                    scale_factor = 300 / img.get_height()
+                    new_size = (int(img.get_width() * scale_factor), 300)
+                    portraits[char_name] = pygame.transform.scale(img, new_size)
+                    loaded = True
+            except: pass
+            
+            if not loaded:
+                surf = pygame.Surface((200, 300))
+                if char_name == "Hero": surf.fill(BLUE)
+                elif char_name == "King": surf.fill(RED)
+                elif char_name == "Goddess": surf.fill(YELLOW)
+                txt = self.font.render(char_name, True, WHITE)
+                surf.blit(txt, (100 - txt.get_width()//2, 150))
+                portraits[char_name] = surf
+        
+        return portraits
+
+    # --- STORY / DIALOGUE DATA ---
+    def get_dialogue_data(self, scene_id):
+        script = []
+        
+        # --- SPLIT INTRO INTO TWO PARTS ---
+        if scene_id == "intro_goddess":
+            script = [
+                {"name": "???", "text": "Awaken... chosen one...", "sprite": "Goddess"},
+                {"name": "Goddess", "text": "The darkness is rising. The Demon Lord has returned to the Spire.", "sprite": "Goddess"},
+                {"name": "Goddess", "text": "You must find your strength. The King awaits you.", "sprite": "Goddess"},
+            ]
+        elif scene_id == "intro_king":
+            script = [
+                {"name": "King", "text": "Ah, you have arrived! The prophecy spoke of a warrior in blue.", "sprite": "King"},
+                {"name": "King", "text": "Our village is under siege. Monsters dwell on the journey to the Demon Lord's Castle.", "sprite": "King"},
+                {"name": "Hero", "text": "I will do what I can, your majesty.", "sprite": "Hero"},
+            ]
+        # ----------------------------------
+        
+        elif scene_id == "level_1_clear": # Slime
+            script = [
+                {"name": "Hero", "text": "Just a Slime. Hardly a challenge.", "sprite": "Hero"},
+                {"name": "Hero", "text": "But the air gets heavier further down...", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_2_clear": # Goblin
+            script = [
+                {"name": "Goblin", "text": "Grah! How... could I lose?", "sprite": "Goblin"},
+                {"name": "Hero", "text": "They are getting smarter. It was blocking my attacks.", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_3_clear": # Skeleton
+            script = [
+                {"name": "Hero", "text": "Undead... magic seems to work best on these bones.", "sprite": "Hero"},
+                {"name": "Hero", "text": "The crypts are silent again.", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_4_clear": # Orc
+            script = [
+                {"name": "Orc", "text": "ME... CRUSH... YOU... NEXT... TIME...", "sprite": "Orc"},
+                {"name": "Hero", "text": "Such brute strength. I need to keep my armor upgraded.", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_5_clear": # Demon
+            script = [
+                {"name": "Demon", "text": "You break my barrier? Impossible mortal!", "sprite": "Demon"},
+                {"name": "Hero", "text": "Dark magic barriers... I must save my MP for these.", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_6_clear": # Golem
+            script = [
+                {"name": "Hero", "text": "My sword barely scratched it. Magic was the key.", "sprite": "Hero"},
+                {"name": "King", "text": "Incredible! You defeated the Stone Guardian!", "sprite": "King"}
+            ]
+        elif scene_id == "level_7_clear": # Chimera
+            script = [
+                {"name": "Hero", "text": "A beast of chaos. It guarded its weak points well.", "sprite": "Hero"},
+                {"name": "Hero", "text": "Only three floors remain...", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_8_clear": # Dark Knight
+            script = [
+                {"name": "Dark Knight", "text": "You... remind me... of who I once was...", "sprite": "Dark Knight"},
+                {"name": "Hero", "text": "A fallen hero? Is this my fate if I fail?", "sprite": "Hero"}
+            ]
+        elif scene_id == "level_9_clear": # Dragon
+            script = [
+                {"name": "Dragon", "text": "ROAAAAAR! The Master... will end... you...", "sprite": "Dragon"},
+                {"name": "Hero", "text": "The heat was unbearable. The Demon Lord is next.", "sprite": "Hero"},
+            ]
+        elif scene_id == "level_10_clear": # Demon Lord
+            script = [
+                {"name": "Demon Lord", "text": "How? I am eternal! The darkness... cannot die!", "sprite": "Demon Lord"},
+                {"name": "Hero", "text": "It is over. The dawn returns.", "sprite": "Hero"},
+                {"name": "Goddess", "text": "Well done, Chosen One. Peace is restored.", "sprite": "Goddess"},
+            ]
+        
+        elif scene_id == "ending_monologue": # <--- NEW FINAL SCENE
+            script = [
+                 {"name": "Hero", "text": "(My journey ends here... for now.)", "sprite": "Hero_Final"}
+            ]
+            
+        return script
+
+    def start_dialogue(self, scene_id, next_state=STATE_HUB):
+        self.dialogue_queue = self.get_dialogue_data(scene_id)
+        if not self.dialogue_queue:
+            # If no dialogue for this scene, skip directly to next state
+            self.state = next_state
+            return
+            
+        self.dialogue_index = 0
+        self.dialogue_next_state = next_state
+        
+        # --- BACKGROUND LOADING FOR DIALOGUE ---
+        bg_file = self.dialogue_bg_map.get(scene_id)
+        self.current_dialogue_bg = None
+        if bg_file:
+            loaded_bg = self.load_background(bg_file)
+            if loaded_bg:
+                self.current_dialogue_bg = loaded_bg
+            else:
+                self.current_dialogue_bg = self.bg_hub 
+        else:
+            self.current_dialogue_bg = self.bg_hub 
+            
+        self.state = STATE_DIALOGUE
+
     def reset_game(self):
         self.player = Character("Hero", 100, 50, 20, 5, is_player=True)
         self.current_dungeon_depth = 1
-        self.state = STATE_HUB
+        # Start with Goddess Intro, which then triggers King Intro
+        self.start_dialogue("intro_goddess", STATE_INTRO_PART_2)
 
     def get_save_path(self, slot): return f"savegame_{slot}.json"
     def save_game(self, slot):
@@ -496,7 +643,8 @@ class Game:
                 if event.button == 1: self.mouse_click_pos = event.pos
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_z: self.key_pressed_enter = True
+                if event.key == pygame.K_z or event.key == pygame.K_RETURN: 
+                    self.key_pressed_enter = True
                 
                 if self.state == STATE_START:
                     if event.key == pygame.K_UP: self.menu_index = (self.menu_index - 1) % 3
@@ -533,6 +681,13 @@ class Game:
                     if event.key == pygame.K_x:
                         if self.battle_menu_state != BATTLE_MAIN:
                             self.battle_menu_state = BATTLE_MAIN; self.menu_index = 0
+                
+                # --- DIALOGUE INPUT ---
+                elif self.state == STATE_DIALOGUE:
+                    if self.key_pressed_enter:
+                        self.dialogue_index += 1
+                        if self.dialogue_index >= len(self.dialogue_queue):
+                            self.state = self.dialogue_next_state
 
     def draw_button(self, text, x, y, index, active_color, inactive_color, font=None):
         if font is None: font = self.font
@@ -554,9 +709,6 @@ class Game:
         self.active_battle_level = level
         self.enemy = generate_enemy(level)
         
-        # --- SELECT BATTLE BACKGROUND ---
-        # Look up the enemy type in our loaded backgrounds map.
-        # If found, use it. If not, fallback to self.bg_battle_default.
         self.current_battle_bg = self.battle_backgrounds.get(self.enemy.char_type, self.bg_battle_default)
 
         self.floating_texts = []
@@ -577,12 +729,10 @@ class Game:
         elif c_type in ["Demon", "Demon Lord"]: self.demon_barrier_active = True
         self.mechanic_timer = self.mechanic_interval
         
-        # Player is Animated Sprite
         self.player.sprite = AnimatedSprite(self.anim_manager, self.WIDTH * 0.25, self.HEIGHT * 0.6)
         self.player.sprite.set_animation("idle_down")
         
-        # Enemy is Static Sprite (Using loaded image)
-        enemy_img = self.enemy_images.get(c_type, self.enemy_images["Slime"]) # Fallback to Slime if missing
+        enemy_img = self.enemy_images.get(c_type, self.enemy_images["Slime"])
         self.enemy.sprite = StaticSprite(enemy_img, self.WIDTH * 0.75, self.HEIGHT * 0.55)
 
     def end_player_turn(self):
@@ -681,189 +831,6 @@ class Game:
         self.state = STATE_VICTORY
         if self.player.sprite: self.player.sprite.set_animation("idle_down")
 
-    def enemy_attack_trigger(self):
-        # Enemy is static, no animation call needed, maybe a shake?
-        dmg = self.player.take_damage(self.enemy.atk)
-        if self.player.sprite: self.spawn_popup(str(dmg), RED, self.player.sprite.x, self.player.sprite.y)
-        self.add_red_flash(150)
-        self.add_screen_shake(0.3, 10)
-        if not self.player.is_alive:
-            self.is_battle_active = False
-            if self.player.sprite: self.player.sprite.set_animation("death", loop=False)
-            return
-
-    def add_screen_shake(self, d, i): self.screen_shake_duration = d; self.screen_shake_intensity = i
-    def add_red_flash(self, a): self.red_flash_alpha = a
-    
-    def draw_hp_bar(self, surface, sprite_rect, current, max_val, color):
-        if not sprite_rect: return
-        bar_w, bar_h = 100, 10
-        x = sprite_rect.centerx - bar_w // 2
-        y = sprite_rect.top - 20 
-        ratio = current / max_val
-        pygame.draw.rect(surface, GRAY, (x, y, bar_w, bar_h))
-        pygame.draw.rect(surface, color, (x, y, int(bar_w * ratio), bar_h))
-        pygame.draw.rect(surface, WHITE, (x, y, bar_w, bar_h), 2)
-    
-    def draw_atb_bar(self, surface, sprite_rect, current, max_val):
-        if not sprite_rect: return
-        x = sprite_rect.centerx - ATB_BAR_WIDTH // 2
-        y = sprite_rect.bottom + 10 
-        ratio = current / max_val
-        bar_color = CYAN
-        if current >= max_val: bar_color = YELLOW
-        pygame.draw.rect(surface, DARK_GRAY, (x, y, ATB_BAR_WIDTH, ATB_BAR_HEIGHT))
-        pygame.draw.rect(surface, bar_color, (x, y, int(ATB_BAR_WIDTH * ratio), ATB_BAR_HEIGHT))
-        pygame.draw.rect(surface, WHITE, (x, y, ATB_BAR_WIDTH, ATB_BAR_HEIGHT), 1)
-
-    def draw_battle_hint(self):
-        if not self.enemy or not self.enemy.is_alive: return
-        hint = ""; color = WHITE
-        c_type = self.enemy.char_type
-        if c_type == "Slime": hint = "The Slime wobbles... Vulnerable everywhere."; color = CYAN
-        elif c_type == "Goblin": blocked = self.enemy_blocked_zones[0]; hint = f"Goblin blocks {blocked.upper()}!"; color = YELLOW
-        elif c_type in ["Orc", "Dark Knight", "Dragon"]:
-            all_zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
-            open_zone = [z for z in all_zones if z not in self.enemy_blocked_zones][0]
-            if open_zone.upper() == "HIGH":
-                hint = f"Heavy Guard! HEAD exposed!"; color = ORANGE
-            if open_zone.upper() == "MID":
-                hint = f"Heavy Guard! TORSO exposed!"; color = ORANGE
-            if open_zone.upper() == "LOW":
-                hint = f"Heavy Guard! LEGS exposed!"; color = ORANGE
-        elif c_type == "Chimera": blocked = self.enemy_blocked_zones[0]; hint = f"The Chimera guards {blocked.upper()} with its tail!"; color = ORANGE
-        elif c_type in ["Skeleton", "Golem"]: hint = "Armor is too thick...."; color = GRAY
-        elif c_type in ["Demon", "Demon Lord"]:
-            if self.demon_barrier_active: hint = "Dark Shield Active!"; color = PURPLE
-            else: 
-                if c_type == "Demon Lord":
-                    all_zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
-                    open_zone = [z for z in all_zones if z not in self.enemy_blocked_zones][0]
-                    if open_zone.upper() == "HIGH":
-                        hint = f"Barrier Down! He guards fast! His HEAD is exposed!"; color = RED
-                    if open_zone.upper() == "MID":
-                        hint = f"Barrier Down! He guards fast! His TORSO is exposed!"; color = RED
-                    if open_zone.upper() == "LOW":
-                        hint = f"Barrier Down! He guards fast! His LEGS are exposed!"; color = RED
-                else: hint = "Shield Shattered! Attack now!"; color = RED
-        if hint:
-            lbl = self.font.render(hint, True, color)
-            bg_rect = lbl.get_rect(center=(self.WIDTH//2, 80))
-            pygame.draw.rect(self.screen, BLACK, bg_rect.inflate(30, 10))
-            pygame.draw.rect(self.screen, WHITE, bg_rect.inflate(30, 10), 2)
-            self.screen.blit(lbl, bg_rect)
-
-    def draw_battle(self):
-        # --- DRAW BATTLE BACKGROUND ---
-        # If the specific BG for this enemy exists, use it.
-        # Otherwise, fall back to default or a solid color.
-        if self.current_battle_bg:
-            ox = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity) if self.screen_shake_duration > 0 else 0
-            oy = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity) if self.screen_shake_duration > 0 else 0
-            self.screen.blit(self.current_battle_bg, (ox, oy))
-        else: 
-            self.screen.fill((40, 20, 20))
-
-        self.draw_battle_hint()
-        p_rect = None; e_rect = None
-        if self.player.sprite: p_rect = self.player.sprite.draw(self.screen)
-        if self.enemy.sprite: e_rect = self.enemy.sprite.draw(self.screen)
-        
-        if p_rect and self.player.is_alive: 
-            self.draw_hp_bar(self.screen, p_rect, self.player.hp, self.player.max_hp, GREEN)
-            self.draw_atb_bar(self.screen, p_rect, self.player.atb, ATB_MAX)
-        
-        if e_rect and self.enemy.is_alive: 
-            self.draw_hp_bar(self.screen, e_rect, self.enemy.hp, self.enemy.max_hp, RED)
-            # Draw Enemy Name
-            name_surf = self.small_font.render(self.enemy.name, True, WHITE)
-            outline_surf = self.small_font.render(self.enemy.name, True, BLACK)
-            name_rect = name_surf.get_rect(midtop=(e_rect.centerx, e_rect.bottom - 40))
-            self.screen.blit(outline_surf, (name_rect.x + 2, name_rect.y + 2))
-            self.screen.blit(name_surf, name_rect)
-        
-        for txt in self.floating_texts: txt.draw(self.screen)
-
-        ui_y = self.HEIGHT - 250
-        pygame.draw.rect(self.screen, BLACK, (0, ui_y, self.WIDTH, 250))
-        pygame.draw.rect(self.screen, WHITE, (0, ui_y, self.WIDTH, 250), 3)
-        self.screen.blit(self.font.render(f"{self.player.name} (Lv.{self.player.level})", True, WHITE), (50, ui_y + 30))
-        self.screen.blit(self.font.render(f"MP: {self.player.mp}/{self.player.max_mp}", True, BLUE), (50, ui_y + 80))
-        self.screen.blit(self.font.render(f"Potions: {self.player.potions}", True, YELLOW), (50, ui_y + 130))
-        self.screen.blit(self.font.render(f"Mana Pots: {self.player.mana_potions}", True, CYAN), (50, ui_y + 165))
-        
-        menu_x = self.WIDTH // 2 - 100
-        
-        # Only draw menu if player turn is ready
-        if self.is_player_turn_ready and self.is_battle_active:
-            if self.battle_menu_state == BATTLE_MAIN:
-                opts = ["Attack", "Skills", "Items", "Flee"]
-                for i, o in enumerate(opts):
-                    # We check return value. If True, action taken.
-                    if self.draw_button(o, menu_x, ui_y + 30 + i*50, i, YELLOW, GRAY):
-                        if i == 0: 
-                            self.battle_menu_state = BATTLE_ATTACK_SELECT
-                            self.menu_index = 1
-                        elif i == 1: 
-                            self.battle_menu_state = BATTLE_SKILLS
-                            self.menu_index = 0
-                        elif i == 2: 
-                            self.battle_menu_state = BATTLE_ITEM_SELECT
-                            self.menu_index = 0
-                        elif i == 3: 
-                            self.state = STATE_HUB
-                        # CRITICAL FIX: Break loop so we don't process other buttons with the new index
-                        break 
-
-            elif self.battle_menu_state == BATTLE_ATTACK_SELECT:
-                self.screen.blit(self.small_font.render("SELECT ZONE (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
-                opts = ["High Strike", "Mid Strike", "Low Strike"]
-                zones = [ZONE_UPPER, ZONE_MID, ZONE_LOWER]
-                for i, o in enumerate(opts):
-                    if self.draw_button(o, menu_x, ui_y + 40 + i*50, i, ORANGE, GRAY):
-                        self.execute_attack(zones[i])
-                        break # Break loop
-
-            elif self.battle_menu_state == BATTLE_SKILLS:
-                self.screen.blit(self.small_font.render("SELECT SKILL (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
-                for i, sk in enumerate(self.player.skills):
-                    color = YELLOW
-                    if self.player.mp < sk.cost: color = DARK_GRAY
-                    if self.draw_button(f"{sk.name} ({sk.cost} MP)", menu_x, ui_y + 40 + i*50, i, color, GRAY):
-                        self.execute_skill(sk)
-                        break # Break loop
-            
-            elif self.battle_menu_state == BATTLE_ITEM_SELECT:
-                self.screen.blit(self.small_font.render("SELECT ITEM (X to BACK)", True, WHITE), (menu_x, ui_y + 10))
-                
-                # Health Potion Button
-                hp_txt = f"Health Potion ({self.player.potions})"
-                if self.draw_button(hp_txt, menu_x, ui_y + 40, 0, GREEN, GRAY):
-                    self.execute_potion()
-                
-                # Mana Potion Button
-                mp_txt = f"Mana Potion ({self.player.mana_potions})"
-                if self.draw_button(mp_txt, menu_x, ui_y + 90, 1, BLUE, GRAY):
-                    self.execute_mana_potion()
-
-        if self.red_flash_alpha > 0:
-            flash = pygame.Surface((self.WIDTH, self.HEIGHT))
-            flash.fill(RED); flash.set_alpha(int(self.red_flash_alpha))
-            self.screen.blit(flash, (0,0))
-
-    def draw_victory_screen(self):
-        self.screen.fill((0, 50, 0))
-        title = self.title_font.render("VICTORY!", True, YELLOW)
-        self.screen.blit(title, (self.WIDTH//2 - title.get_width()//2, self.HEIGHT * 0.2))
-        gold_txt = self.font.render(f"Gold Gained: {self.victory_data['gold']}", True, WHITE)
-        exp_txt = self.font.render(f"Experience: {self.victory_data['exp']}", True, WHITE)
-        self.screen.blit(gold_txt, (self.WIDTH//2 - gold_txt.get_width()//2, self.HEIGHT * 0.4))
-        self.screen.blit(exp_txt, (self.WIDTH//2 - exp_txt.get_width()//2, self.HEIGHT * 0.5))
-        if self.victory_data['leveled']:
-            lvl_txt = self.font.render("LEVEL UP! Stats Increased!", True, GREEN)
-            self.screen.blit(lvl_txt, (self.WIDTH//2 - lvl_txt.get_width()//2, self.HEIGHT * 0.6))
-        if self.draw_button("Continue", self.WIDTH//2 - 100, self.HEIGHT * 0.8, 0, YELLOW, GRAY, font=self.small_font): self.state = STATE_HUB
-
     def draw_game_over(self):
         self.screen.fill(BLACK)
         title = self.title_font.render("GAME OVER", True, RED)
@@ -893,6 +860,92 @@ class Game:
             self.screen.blit(txt, (self.WIDTH//2 - 200, start_y + i * 50))
         if self.draw_button("Return", self.WIDTH//2 - 50, self.HEIGHT - 100, 0, GRAY, WHITE, font=self.small_font): self.state = STATE_HUB
 
+    def wrap_text(self, text, font, max_width):
+        """Helper to wrap text into multiple lines"""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            w, h = font.size(test_line)
+            if w < max_width:
+                current_line.append(word)
+            else:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+        lines.append(' '.join(current_line))
+        return lines
+
+    def draw_dialogue(self):
+        # 1. Background (Specific or Hub + Overlay)
+        if self.current_dialogue_bg:
+            self.screen.blit(self.current_dialogue_bg, (0,0))
+        else:
+            self.screen.fill(BLACK)
+
+        overlay = pygame.Surface((self.WIDTH, self.HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0,0))
+
+        if self.dialogue_index < len(self.dialogue_queue):
+            data = self.dialogue_queue[self.dialogue_index]
+            
+            # 2. Draw Portrait
+            sprite_key = data.get("sprite", "Hero")
+            if sprite_key in self.portraits:
+                img = self.portraits[sprite_key]
+                self.screen.blit(img, (self.WIDTH//2 - img.get_width()//2, self.HEIGHT - 300 - img.get_height()))
+            elif sprite_key in self.enemy_images:
+                img = self.enemy_images[sprite_key]
+                img = pygame.transform.scale(img, (200, 200))
+                self.screen.blit(img, (self.WIDTH//2 - 100, self.HEIGHT - 500))
+
+            # 3. Draw Text Box
+            box_h = 250
+            pygame.draw.rect(self.screen, BLACK, (0, self.HEIGHT - box_h, self.WIDTH, box_h))
+            pygame.draw.rect(self.screen, WHITE, (0, self.HEIGHT - box_h, self.WIDTH, box_h), 4)
+
+            # 4. Draw Name
+            name_txt = self.font.render(data["name"], True, YELLOW)
+            self.screen.blit(name_txt, (50, self.HEIGHT - box_h + 30))
+
+            # 5. Draw Text (Wrapped)
+            lines = self.wrap_text(data["text"], self.small_font, self.WIDTH - 100)
+            for i, line in enumerate(lines):
+                txt_surf = self.small_font.render(line, True, WHITE)
+                self.screen.blit(txt_surf, (50, self.HEIGHT - box_h + 80 + (i * 35)))
+
+            # 6. Continue Prompt
+            cont_txt = self.small_font.render("Press Z to continue...", True, CYAN)
+            self.screen.blit(cont_txt, (self.WIDTH - 300, self.HEIGHT - 50))
+
+    def draw_victory_screen(self):
+        self.screen.fill((0, 50, 0))
+        title = self.title_font.render("VICTORY!", True, YELLOW)
+        self.screen.blit(title, (self.WIDTH//2 - title.get_width()//2, self.HEIGHT * 0.2))
+        gold_txt = self.font.render(f"Gold Gained: {self.victory_data['gold']}", True, WHITE)
+        exp_txt = self.font.render(f"Experience: {self.victory_data['exp']}", True, WHITE)
+        self.screen.blit(gold_txt, (self.WIDTH//2 - gold_txt.get_width()//2, self.HEIGHT * 0.4))
+        self.screen.blit(exp_txt, (self.WIDTH//2 - exp_txt.get_width()//2, self.HEIGHT * 0.5))
+        if self.victory_data['leveled']:
+            lvl_txt = self.font.render("LEVEL UP! Stats Increased!", True, GREEN)
+            self.screen.blit(lvl_txt, (self.WIDTH//2 - lvl_txt.get_width()//2, self.HEIGHT * 0.6))
+        
+        if self.draw_button("Continue", self.WIDTH//2 - 100, self.HEIGHT * 0.8, 0, YELLOW, GRAY, font=self.small_font): 
+            # Check dialogue for this specific level
+            dialogue_key = f"level_{self.active_battle_level}_clear"
+            
+            # Default next state is HUB
+            next_s = STATE_HUB
+            
+            # If this was Level 10 (Demon Lord), we chain to Ending Monologue
+            if self.active_battle_level == 10:
+                next_s = STATE_ENDING_PART_2
+            
+            self.start_dialogue(dialogue_key, next_s)
+
     def run(self):
         while True:
             dt = self.clock.tick(FPS) / 1000.0
@@ -908,7 +961,6 @@ class Game:
                         self.player.sprite.set_animation("idle_down")
                 if self.enemy.sprite: 
                     self.enemy.sprite.update(dt)
-                    # Enemy is static, no animation check needed
                 if not self.player.is_alive and self.player.sprite and self.player.sprite.animation_finished:
                      pygame.time.delay(1000)
                      self.state = STATE_GAME_OVER
@@ -958,6 +1010,10 @@ class Game:
                     y = 300 + (i % 5) * 60
                     if self.draw_button(txt, x, y, i, RED, color):
                          if not is_locked: self.start_battle(level_num)
+                
+                # <--- ADDED RETURN TO VILLAGE PROMPT
+                back_txt = self.small_font.render("Press X to return to Village", True, WHITE)
+                self.screen.blit(back_txt, (50, self.HEIGHT - 50))
 
             elif self.state == STATE_SHOP:
                 if self.bg_shop: self.screen.blit(self.bg_shop, (0,0))
@@ -987,6 +1043,18 @@ class Game:
                         else: 
                             if self.load_game(i): self.state = STATE_HUB
 
+            # <--- STATE HANDLER FOR THE INTRO SEQUENCE
+            elif self.state == STATE_INTRO_PART_2:
+                # Goddess dialogue finished, now start King dialogue
+                self.start_dialogue("intro_king", STATE_HUB)
+
+            # <--- STATE HANDLER FOR ENDING SEQUENCE
+            elif self.state == STATE_ENDING_PART_2:
+                # Final "Everyone is happy" dialogue finished, now start Hero Monologue
+                # When Hero Monologue ends, go to STATE_START (Title Screen)
+                self.start_dialogue("ending_monologue", STATE_START)
+
+            elif self.state == STATE_DIALOGUE: self.draw_dialogue()
             elif self.state == STATE_BATTLE: self.draw_battle()
             elif self.state == STATE_VICTORY: self.draw_victory_screen()
             elif self.state == STATE_GAME_OVER: self.draw_game_over()
